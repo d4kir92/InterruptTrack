@@ -5,6 +5,7 @@ for i, unit in ipairs(UNITS) do
 	UNITMAP[unit] = i
 end
 
+local PETUNITS = {"pet", "partypet1", "partypet2", "partypet3", "partypet4"}
 local PETOWNER = {
 	["pet"] = "player",
 	["partypet1"] = "party1",
@@ -83,6 +84,7 @@ local bars = {}
 local casted = {}
 local learned = {}
 local pending = {}
+local castStats = {}
 local elapsed = 0
 local markElapsed = 0
 local lastKicker = nil
@@ -447,8 +449,8 @@ end
 
 local PREFIX = "InterruptTrack"
 local PLATEICONSIZE = 28
-local marks = {}
-local markBySender = {}
+local PLATEICONOFFSET = 20
+local markers = {}
 local function FirstChar(name)
 	if name == nil or name == "" then return "" end
 	local b = strbyte(name, 1)
@@ -471,50 +473,112 @@ local function GetPlateToken(plate)
 	return token
 end
 
-local function GetMySpecIcon()
-	if GetSpecialization and GetSpecializationInfo then
-		local spec = GetSpecialization()
-		if spec then
-			local _, _, _, icon = GetSpecializationInfo(spec)
-			if icon then return icon end
-		end
-	end
-
-	local _, class = UnitClass("player")
-
-	return InterruptTrack:GetClassIcon(class)
-end
-
 local function GetPlateMarkFrame(plate)
 	if plate.ITMark then return plate.ITMark end
 	local frame = CreateFrame("Frame", nil, plate)
 	frame:SetSize(PLATEICONSIZE, PLATEICONSIZE)
-	frame:SetPoint("LEFT", plate, "RIGHT", 6, 0)
+	frame:SetPoint("LEFT", plate, "RIGHT", PLATEICONOFFSET, 0)
 	frame.icon = frame:CreateTexture(nil, "ARTWORK")
 	frame.icon:SetAllPoints(frame)
 	frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 	frame.text = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	frame.text:SetPoint("CENTER", frame, "CENTER", 0, 0)
+	frame.time = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	frame.time:SetPoint("TOP", frame, "BOTTOM", 0, -2)
 	frame:Hide()
 	plate.ITMark = frame
 
 	return frame
 end
 
+local function GetKickInfo()
+	local best = nil
+	local guid = GetNextInRotation()
+	if guid then
+		for i, entry in ipairs(entries) do
+			if entry.guid == guid and entry.remaining <= 0 then
+				best = entry
+
+				break
+			end
+		end
+	end
+
+	if best == nil then
+		for i, entry in ipairs(entries) do
+			if best == nil or entry.remaining < best.remaining then best = entry end
+		end
+	end
+
+	if best == nil then return nil end
+	local _, _, icon = InterruptTrack:GetSpellInfo(best.spellID)
+
+	return {
+		["icon"] = icon,
+		["initial"] = FirstChar(best.name),
+		["remaining"] = best.remaining,
+		["ready"] = best.remaining <= 0
+	}
+end
+
+local function GetUnitByName(name)
+	for i, unit in ipairs(UNITS) do
+		if Safe(UnitName(unit)) == name then return unit end
+	end
+
+	return nil
+end
+
+local function GetTargetUnit(unit)
+	if unit == "player" then return "target" end
+
+	return unit .. "target"
+end
+
+local activeMarkers = {}
 function InterruptTrack:UpdatePlates()
 	if C_NamePlate == nil then return end
-	for i, plate in pairs(C_NamePlate.GetNamePlates()) do
+	wipe(activeMarkers)
+	for name, active in pairs(markers) do
+		local unit = GetUnitByName(name)
+		if unit then tinsert(activeMarkers, {["target"] = GetTargetUnit(unit)}) end
+	end
+
+	local plates = C_NamePlate.GetNamePlates()
+	local info = nil
+	if #activeMarkers > 0 then info = GetKickInfo() end
+	if info == nil then
+		for i, plate in pairs(plates) do
+			if plate.ITMark then plate.ITMark:Hide() end
+		end
+
+		return
+	end
+
+	for i, plate in pairs(plates) do
 		local token = GetPlateToken(plate)
-		local mark = nil
+		local marked = false
 		if token then
-			local guid = Safe(UnitGUID(token))
-			if guid then mark = marks[guid] end
+			for x, tab in ipairs(activeMarkers) do
+				if Safe(UnitIsUnit(token, tab.target), false) == true then
+					marked = true
+
+					break
+				end
+			end
 		end
 
 		local frame = GetPlateMarkFrame(plate)
-		if mark then
-			frame.icon:SetTexture(mark.icon)
-			frame.text:SetText(mark.initial)
+		if marked then
+			frame.icon:SetTexture(info.icon)
+			frame.icon:SetDesaturated(info.ready ~= true)
+			frame.text:SetText(info.initial)
+			if info.ready then
+				frame.time:SetText("")
+			else
+				frame.time:SetText(format("%.0f", info.remaining))
+			end
+
 			frame:Show()
 		else
 			frame:Hide()
@@ -522,20 +586,7 @@ function InterruptTrack:UpdatePlates()
 	end
 end
 
-function InterruptTrack:ApplyMark(sender, guid, icon)
-	local old = markBySender[sender]
-	if old then marks[old] = nil end
-	if guid == nil then
-		markBySender[sender] = nil
-	else
-		markBySender[sender] = guid
-		marks[guid] = {["icon"] = icon, ["initial"] = FirstChar(sender), ["sender"] = sender}
-	end
-
-	InterruptTrack:UpdatePlates()
-end
-
-function InterruptTrack:SendMark(guid)
+function InterruptTrack:SendMark(active)
 	if C_ChatInfo == nil or C_ChatInfo.SendAddonMessage == nil then return end
 	local channel = nil
 	if IsInRaid() then
@@ -546,29 +597,42 @@ function InterruptTrack:SendMark(guid)
 
 	if channel == nil then return end
 	local msg = "C"
-	if guid then msg = "M:" .. guid .. ":" .. tostring(GetMySpecIcon() or 0) end
+	if active then msg = "M" end
 	C_ChatInfo.SendAddonMessage(PREFIX, msg, channel)
 end
 
-function InterruptTrack:SetMark(guid)
-	InterruptTrack.markGuid = guid
-	InterruptTrack:ApplyMark(UnitName("player"), guid, GetMySpecIcon())
-	InterruptTrack:SendMark(guid)
+function InterruptTrack:SetMark(active)
+	local me = Safe(UnitName("player"))
+	if me == nil then return end
+	if active then
+		markers[me] = true
+	else
+		markers[me] = nil
+	end
+
+	InterruptTrack:SendMark(active)
+	InterruptTrack:UpdatePlates()
+end
+
+function InterruptTrack:IsMarking()
+	local me = Safe(UnitName("player"))
+
+	return me ~= nil and markers[me] ~= nil
 end
 
 function InterruptTrack:OnAddonMessage(msg, sender)
 	if msg == nil or sender == nil then return end
 	local name = strsplit("-", sender)
-	if name == UnitName("player") then return end
+	if name == Safe(UnitName("player")) then return end
 	if msg == "C" then
-		InterruptTrack:ApplyMark(name, nil, nil)
-
-		return
+		markers[name] = nil
+	else
+		local cmd = strsplit(":", msg)
+		if cmd ~= "M" then return end
+		markers[name] = true
 	end
 
-	local cmd, guid, icon = strsplit(":", msg)
-	if cmd ~= "M" or guid == nil or guid == "" then return end
-	InterruptTrack:ApplyMark(name, guid, tonumber(icon))
+	InterruptTrack:UpdatePlates()
 end
 
 local markButton = CreateFrame("Button", "ITMarkButton", UIParent)
@@ -585,63 +649,51 @@ function InterruptTrack:ApplyKeybind()
 	SetOverrideBindingClick(markButton, true, key, "ITMarkButton")
 end
 
-local function GetTargetPlateUnit()
-	if C_NamePlate == nil then return nil end
-	if C_NamePlate.GetNamePlateForUnit then
-		local plate = C_NamePlate.GetNamePlateForUnit("target")
-		if plate and plate.namePlateUnitToken then return plate.namePlateUnitToken end
-	end
-
-	for i, plate in pairs(C_NamePlate.GetNamePlates()) do
-		local token = plate.namePlateUnitToken
-		if token == nil and plate.UnitFrame then token = plate.UnitFrame.unit end
-		if token and Safe(UnitIsUnit(token, "target"), false) == true then return token end
-	end
-
-	return nil
-end
-
 function InterruptTrack:MarkTarget()
+	if InterruptTrack:IsMarking() then
+		InterruptTrack:SetMark(false)
+		InterruptTrack:MSG(InterruptTrack:Trans("LID_MARKTARGETCLEARED"))
+
+		return
+	end
+
 	if Safe(UnitExists("target"), true) ~= true then
 		InterruptTrack:MSG(InterruptTrack:Trans("LID_MARKNOTARGET"))
 
 		return
 	end
 
-	local token = GetTargetPlateUnit()
-	local guid = nil
-	local name = nil
-	if token then
-		guid = Safe(UnitGUID(token))
-		name = Safe(UnitName(token))
-	end
-
-	InterruptTrack:DEBUG("MARK", tostring(token), DebugValue(guid), DebugValue(name))
-	if guid == nil then
-		InterruptTrack:MSG(InterruptTrack:Trans("LID_MARKTARGETSECRET"))
-
-		return
-	end
-
-	if InterruptTrack.markGuid == guid then
-		InterruptTrack:SetMark(nil)
-		InterruptTrack:MSG(InterruptTrack:Trans("LID_MARKTARGETCLEARED"))
-
-		return
-	end
-
-	InterruptTrack:SetMark(guid)
-	InterruptTrack:MSG(InterruptTrack:Trans("LID_MARKTARGETSET"), name or guid)
+	InterruptTrack:SetMark(true)
+	InterruptTrack:MSG(InterruptTrack:Trans("LID_MARKTARGETSET"), Safe(UnitName("target"), ""))
 end
 
 function InterruptTrack:CheckSecrets()
-	InterruptTrack:MSG("target guid", DebugValue(UnitGUID("target")))
-	InterruptTrack:MSG("target name", DebugValue(UnitName("target")))
-	InterruptTrack:MSG("target mark", DebugValue(GetRaidTargetIndex("target")))
-	InterruptTrack:MSG("nameplate1 guid", DebugValue(UnitGUID("nameplate1")))
-	InterruptTrack:MSG("nameplate1 name", DebugValue(UnitName("nameplate1")))
-	InterruptTrack:MSG("nameplate1 is target", DebugValue(UnitIsUnit("nameplate1", "target")))
-	InterruptTrack:MSG("party1target guid", DebugValue(UnitGUID("party1target")))
+	InterruptTrack:MSG("target exists", DebugValue(UnitExists("target")), "guid", DebugValue(UnitGUID("target")))
+	if C_NamePlate == nil then
+		InterruptTrack:MSG("C_NamePlate missing")
+
+		return
+	end
+
+	local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, "target")
+	InterruptTrack:MSG("GetNamePlateForUnit(target)", tostring(ok), tostring(plate))
+	if ok and plate then InterruptTrack:MSG("  token", tostring(plate.namePlateUnitToken)) end
+	local ok2, plate2 = pcall(C_NamePlate.GetNamePlateForUnit, "target", true)
+	InterruptTrack:MSG("GetNamePlateForUnit(target, true)", tostring(ok2), tostring(plate2))
+	if ok2 and plate2 then InterruptTrack:MSG("  token", tostring(plate2.namePlateUnitToken)) end
+	local count = 0
+	for i, p in pairs(C_NamePlate.GetNamePlates()) do
+		count = count + 1
+		local token = GetPlateToken(p)
+		local highlight = "?"
+		if p.UnitFrame and p.UnitFrame.selectionHighlight then highlight = tostring(p.UnitFrame.selectionHighlight:IsShown()) end
+		InterruptTrack:MSG("plate", tostring(token), DebugValue(UnitName(token)), "guid", DebugValue(UnitGUID(token)), "isTarget", DebugValue(UnitIsUnit(token, "target")), "highlight", highlight)
+	end
+
+	InterruptTrack:MSG("plate count", count)
+	for token, n in pairs(castStats) do
+		InterruptTrack:MSG("cast events", token, n)
+	end
 end
 
 local markedPlates = {}
@@ -752,6 +804,7 @@ function InterruptTrack:CreateMainFrame()
 			if markElapsed >= 0.25 then
 				markElapsed = 0
 				InterruptTrack:UpdateMarks()
+				InterruptTrack:UpdatePlates()
 			end
 		end
 	)
@@ -759,12 +812,30 @@ function InterruptTrack:CreateMainFrame()
 	InterruptTrack:UpdateRoster()
 end
 
+local castFrames = {}
+local function OnCastEvent(sel, event, unit, castGUID, spellID)
+	local key = "secret-unit"
+	if IsSecret(unit) == false then
+		key = unit
+		if IsSecret(spellID) then key = unit .. " (secret spell)" end
+	end
+
+	castStats[key] = (castStats[key] or 0) + 1
+	InterruptTrack:OnCast(unit, spellID)
+end
+
+for i, unit in ipairs(UNITS) do
+	local frame = CreateFrame("Frame")
+	frame:SetScript("OnEvent", OnCastEvent)
+	if C_EventUtils == nil or C_EventUtils.IsEventValid("UNIT_SPELLCAST_SUCCEEDED") then frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit, PETUNITS[i]) end
+	castFrames[i] = frame
+end
+
 local eventFrame = CreateFrame("Frame")
 InterruptTrack:RegisterEvent(eventFrame, "PLAYER_ENTERING_WORLD")
 InterruptTrack:RegisterEvent(eventFrame, "GROUP_ROSTER_UPDATE")
 InterruptTrack:RegisterEvent(eventFrame, "PLAYER_ROLES_ASSIGNED")
 InterruptTrack:RegisterEvent(eventFrame, "PLAYER_SPECIALIZATION_CHANGED")
-InterruptTrack:RegisterEvent(eventFrame, "UNIT_SPELLCAST_SUCCEEDED")
 InterruptTrack:RegisterEvent(eventFrame, "UNIT_SPELLCAST_INTERRUPTED")
 InterruptTrack:RegisterEvent(eventFrame, "NAME_PLATE_UNIT_ADDED")
 InterruptTrack:RegisterEvent(eventFrame, "NAME_PLATE_UNIT_REMOVED")
@@ -772,10 +843,7 @@ InterruptTrack:RegisterEvent(eventFrame, "CHAT_MSG_ADDON")
 eventFrame:SetScript(
 	"OnEvent",
 	function(sel, event, ...)
-		if event == "UNIT_SPELLCAST_SUCCEEDED" then
-			local unit, _, spellID = ...
-			InterruptTrack:OnCast(unit, spellID)
-		elseif event == "UNIT_SPELLCAST_INTERRUPTED" then
+		if event == "UNIT_SPELLCAST_INTERRUPTED" then
 			local unit, castGUID, spellID = ...
 			InterruptTrack:DEBUG("EVENT INTERRUPTED", DebugValue(unit), DebugValue(castGUID), DebugValue(spellID))
 			InterruptTrack:OnInterrupted(unit, spellID)
