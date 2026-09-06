@@ -33,6 +33,7 @@ local INTERRUPTS = {
 	["WARRIOR"] = {{6552, 15}}
 }
 
+local TRAVELTIME = {[31935] = 2, [147362] = 2}
 local SPELLCDS = {}
 for class, list in pairs(INTERRUPTS) do
 	for i, tab in ipairs(list) do
@@ -51,9 +52,26 @@ SORTERS["ROLE"] = function(a, b)
 	return a.spellID < b.spellID
 end
 
-SORTERS["COOLDOWN"] = function(a, b)
+SORTERS["COOLDOWNASC"] = function(a, b)
 	if a.remaining ~= b.remaining then return a.remaining < b.remaining end
 	if a.name ~= b.name then return a.name < b.name end
+
+	return a.spellID < b.spellID
+end
+
+SORTERS["COOLDOWNDESC"] = function(a, b)
+	if a.remaining ~= b.remaining then return a.remaining > b.remaining end
+	if a.name ~= b.name then return a.name < b.name end
+
+	return a.spellID < b.spellID
+end
+
+SORTERS["COOLDOWN"] = SORTERS["COOLDOWNASC"]
+SORTERS["ROTATION"] = function(a, b)
+	local ra = ROLEORDER[a.role] or 4
+	local rb = ROLEORDER[b.role] or 4
+	if ra ~= rb then return ra < rb end
+	if a.guid ~= b.guid then return a.guid < b.guid end
 
 	return a.spellID < b.spellID
 end
@@ -66,6 +84,8 @@ local casted = {}
 local learned = {}
 local pending = {}
 local elapsed = 0
+local markElapsed = 0
+local lastKicker = nil
 local debug = false
 local function GetDB()
 	InterruptTrackG = InterruptTrackG or {}
@@ -102,6 +122,10 @@ local function GetKey(guid, spellID)
 	return guid .. "-" .. spellID
 end
 
+local function GetWindow(spellID)
+	return TRAVELTIME[spellID] or SUCCESSWINDOW
+end
+
 local function DebugValue(value)
 	if IsSecret(value) then return "<secret>" end
 
@@ -116,7 +140,8 @@ end
 function InterruptTrack:GetSortModes()
 	return {
 		{["value"] = "ROLE", ["label"] = "LID_SORTBYROLE"},
-		{["value"] = "COOLDOWN", ["label"] = "LID_SORTBYCOOLDOWN"}
+		{["value"] = "COOLDOWNDESC", ["label"] = "LID_SORTBYCOOLDOWNDESC"},
+		{["value"] = "COOLDOWNASC", ["label"] = "LID_SORTBYCOOLDOWNASC"}
 	}
 end
 
@@ -191,6 +216,7 @@ function InterruptTrack:OnCast(unit, spellID)
 		InterruptTrack:DEBUG("CAST matched pending interrupt", DebugValue(spellID))
 	end
 
+	lastKicker = guid
 	InterruptTrack:DEBUG("CAST", DebugValue(unit), DebugValue(spellID), DebugValue(guid))
 	if isNew then
 		InterruptTrack:UpdateRoster()
@@ -207,7 +233,7 @@ function InterruptTrack:OnInterrupted(unit, spellID)
 	local duplicate = false
 	for i, entry in ipairs(entries) do
 		local cd = casted[entry.key]
-		if cd ~= nil and now - cd.start <= SUCCESSWINDOW then
+		if cd ~= nil and now - cd.start <= GetWindow(entry.spellID) then
 			if cd.success == true then
 				duplicate = true
 			else
@@ -269,6 +295,11 @@ function InterruptTrack:CreateBar(index)
 	bar.time = bar.status:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	bar.time:SetPoint("RIGHT", bar.status, "RIGHT", -4, 0)
 	bar.time:SetJustifyH("RIGHT")
+	bar.glow = bar:CreateTexture(nil, "BACKGROUND", nil, -1)
+	bar.glow:SetColorTexture(1, 0.82, 0, 1)
+	bar.glow:Hide()
+	bar.mark = bar:CreateTexture(nil, "ARTWORK")
+	bar.mark:Hide()
 	bars[index] = bar
 
 	return bar
@@ -292,6 +323,12 @@ function InterruptTrack:ApplyLayout()
 		bar.status:ClearAllPoints()
 		bar.status:SetPoint("TOPLEFT", bar, "TOPLEFT", height + 2, 0)
 		bar.status:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+		bar.glow:ClearAllPoints()
+		bar.glow:SetPoint("TOPLEFT", bar, "TOPLEFT", -2, 2)
+		bar.glow:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 2, -2)
+		bar.mark:ClearAllPoints()
+		bar.mark:SetPoint("LEFT", bar, "RIGHT", 2, 0)
+		bar.mark:SetSize(height, height)
 		InterruptTrack:SetFontSize(bar.name, fontSize, "OUTLINE")
 		InterruptTrack:SetFontSize(bar.time, fontSize, "OUTLINE")
 		bar:Show()
@@ -303,6 +340,39 @@ function InterruptTrack:ApplyLayout()
 
 	local count = math.max(1, #entries)
 	self.frame:SetSize(width, count * (height + spacing) - spacing)
+end
+
+local function GetNextInRotation()
+	local order = {}
+	local ready = {}
+	for i, entry in ipairs(entries) do
+		if ready[entry.guid] == nil then
+			ready[entry.guid] = false
+			tinsert(order, entry.guid)
+		end
+
+		if entry.remaining <= 0 then ready[entry.guid] = true end
+	end
+
+	local count = #order
+	if count == 0 then return nil end
+	local start = 1
+	if lastKicker ~= nil then
+		for i, guid in ipairs(order) do
+			if guid == lastKicker then
+				start = i + 1
+
+				break
+			end
+		end
+	end
+
+	for x = 0, count - 1 do
+		local guid = order[((start - 1 + x) % count) + 1]
+		if ready[guid] then return guid end
+	end
+
+	return nil
 end
 
 local function SetKickedIcon(bar, spellID)
@@ -319,11 +389,21 @@ function InterruptTrack:UpdateBars()
 		entry.remaining, entry.duration = GetRemaining(entry)
 	end
 
-	local sorter = SORTERS[InterruptTrack:GV(GetDB(), "SORTBY", "ROLE")] or SORTERS["ROLE"]
+	local rotation = InterruptTrack:GV(GetDB(), "KICKROTATION", false)
+	local mode = InterruptTrack:GV(GetDB(), "SORTBY", "ROLE")
+	if rotation then mode = "ROTATION" end
+	local sorter = SORTERS[mode] or SORTERS["ROLE"]
 	table.sort(entries, sorter)
+	local nextKicker = nil
+	if rotation then nextKicker = GetNextInRotation() end
 	for i, entry in ipairs(entries) do
 		local bar = bars[i]
 		if bar then
+			if nextKicker ~= nil and entry.guid == nextKicker then
+				bar.glow:Show()
+			else
+				bar.glow:Hide()
+			end
 			local cd = casted[entry.key]
 			local running = entry.remaining > 0 and entry.duration > 0
 			local wantKicked = running and cd ~= nil and cd.hasKicked == true
@@ -360,6 +440,32 @@ function InterruptTrack:UpdateBars()
 				bar.status:SetStatusBarColor(r, g, b)
 				bar.time:SetText(InterruptTrack:Trans("LID_READY"))
 				bar.time:SetTextColor(0.2, 1, 0.2)
+			end
+		end
+	end
+end
+
+function InterruptTrack:UpdateMarks()
+	if self.frame == nil then return end
+	local show = InterruptTrack:GV(GetDB(), "SHOWRAIDMARK", true)
+	for i, entry in ipairs(entries) do
+		local bar = bars[i]
+		if bar then
+			local index = nil
+			if show then
+				local target = "target"
+				if entry.unit ~= "player" then target = entry.unit .. "target" end
+				index = Safe(GetRaidTargetIndex(target))
+			end
+
+			if index ~= bar.markIndex then
+				bar.markIndex = index
+				if index then
+					bar.mark:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. index)
+					bar.mark:Show()
+				else
+					bar.mark:Hide()
+				end
 			end
 		end
 	end
@@ -417,9 +523,16 @@ function InterruptTrack:CreateMainFrame()
 		"OnUpdate",
 		function(sel, ela)
 			elapsed = elapsed + ela
-			if elapsed < 0.05 then return end
-			elapsed = 0
-			InterruptTrack:UpdateBars()
+			if elapsed >= 0.05 then
+				elapsed = 0
+				InterruptTrack:UpdateBars()
+			end
+
+			markElapsed = markElapsed + ela
+			if markElapsed >= 0.25 then
+				markElapsed = 0
+				InterruptTrack:UpdateMarks()
+			end
 		end
 	)
 

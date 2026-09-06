@@ -125,6 +125,8 @@ function InterruptTrack:InitSettings()
 
 	AddCategory("DISPLAY")
 	AddDropdown("SORTBY", "ROLE", InterruptTrack:GetSortModes(), function() InterruptTrack:UpdateBars() end)
+	AddCheckbox("KICKROTATION", false, function() InterruptTrack:UpdateBars() end)
+	AddCheckbox("SHOWRAIDMARK", true, function() InterruptTrack:UpdateMarks() end)
 	AddCategory("BAR", 2)
 	AddSlider("BARWIDTH", 200, 100, 400, 5, 0, function() InterruptTrack:ApplyLayout() end)
 	AddSlider("BARHEIGHT", 24, 10, 60, 1, 0, function() InterruptTrack:ApplyLayout() end)
