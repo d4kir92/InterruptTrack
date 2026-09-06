@@ -1,0 +1,41 @@
+## Interface: 40402
+## Version: 0.1.0
+## Title: InterruptTrack |T:16:16:0:0|t by |cff55d2ffD4KiR |T132115:16:16:0:0|t
+## Notes: 
+## Notes-deDE: 
+## Notes-esES: 
+## Notes-esMX: 
+## Notes-frFR: 
+## Notes-itIT: 
+## Notes-koKR: 
+## Notes-ptBR: 
+## Notes-ruRU: 
+## Notes-zhCN: 
+## Notes-zhTW: 
+## Author: D4KiR |T132115:16:16:0:0|t
+## Category: D4KiR |T132115:16:16:0:0|t
+## X-Category: D4KiR |T132115:16:16:0:0|t
+## DefaultState: enabled
+## SavedVariables: InterruptTrackG
+## SavedVariablesPerCharacter: InterruptTrackC
+## X-Curse-Project-ID: 1638833
+## X-Wago-ID: 
+## IconTexture: 
+
+libs\D4Lib\D4Lib.xml
+
+locale\deDE.lua
+locale\enUS.lua
+locale\esES.lua
+locale\esMX.lua
+locale\frFR.lua
+locale\itIT.lua
+locale\koKR.lua
+locale\ptBR.lua
+locale\ruRU.lua
+locale\zhCN.lua
+locale\zhTW.lua
+
+settings.lua
+
+core.lua
