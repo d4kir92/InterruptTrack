@@ -79,12 +79,17 @@ end
 
 local MINRATIO = 0.6
 local SUCCESSWINDOW = 0.5
+local DRIFTGRACE = 1.5
 local entries = {}
 local bars = {}
 local casted = {}
 local learned = {}
 local pending = {}
 local castStats = {}
+local unknownCasts = {}
+local hasAddon = {}
+local lastHello = 0
+local msgBlocked = false
 local elapsed = 0
 local markElapsed = 0
 local lastKicker = nil
@@ -191,10 +196,95 @@ function InterruptTrack:UpdateRoster()
 
 	InterruptTrack:ApplyLayout()
 	InterruptTrack:UpdateBars()
+	InterruptTrack:SendHello()
+end
+
+local nameIndex = nil
+local function GetNameIndex()
+	if nameIndex then return nameIndex end
+	nameIndex = {}
+	for spellID, cd in pairs(SPELLCDS) do
+		local name = InterruptTrack:GetSpellInfo(spellID)
+		if name and IsSecret(name) == false then nameIndex[name] = spellID end
+	end
+
+	return nameIndex
+end
+
+local function ResolveSpellID(spellID)
+	if spellID == nil then return nil, true end
+	if IsSecret(spellID) == false then return spellID, true end
+	local readable = false
+	if C_Spell and C_Spell.GetSpellName then
+		local ok, name = pcall(C_Spell.GetSpellName, spellID)
+		if ok and name and IsSecret(name) == false then
+			readable = true
+			local id = GetNameIndex()[name]
+			if id then return id, true end
+		end
+	end
+
+	if C_Spell and C_Spell.GetBaseSpell then
+		local ok, baseID = pcall(C_Spell.GetBaseSpell, spellID)
+		if ok and baseID and IsSecret(baseID) == false and SPELLCDS[baseID] then return baseID, true end
+	end
+
+	return nil, readable
+end
+
+local function FindReadyEntry(guid)
+	for i, entry in ipairs(entries) do
+		if entry.guid == guid and entry.remaining <= DRIFTGRACE then return entry end
+	end
+
+	return nil
+end
+
+local function StartUnknownCooldown(entry, castTime, kicked, hasKicked)
+	casted[entry.key] = {
+		["start"] = castTime,
+		["duration"] = learned[entry.key] or SPELLCDS[entry.spellID],
+		["success"] = true,
+		["kicked"] = kicked,
+		["hasKicked"] = hasKicked
+	}
+
+	lastKicker = entry.guid
+end
+
+function InterruptTrack:OnUnknownCast(unit)
+	local owner = PETOWNER[unit] or unit
+	if owner == "player" or UNITMAP[owner] == nil then return end
+	local guid = Safe(UnitGUID(owner))
+	if guid == nil then return end
+	local name = Safe(UnitName(owner))
+	if name and hasAddon[name] then return end
+	local entry = FindReadyEntry(guid)
+	if entry == nil then return end
+	local now = GetTime()
+	if pending.time ~= nil and now - pending.time <= SUCCESSWINDOW then
+		unknownCasts[guid] = nil
+		pending.time = nil
+		StartUnknownCooldown(entry, now, pending.kicked, pending.hasKicked)
+		InterruptTrack:DEBUG("UNIDENTIFIED CAST matched pending interrupt", entry.name)
+		InterruptTrack:UpdateBars()
+
+		return
+	end
+
+	unknownCasts[guid] = now
 end
 
 function InterruptTrack:OnCast(unit, spellID)
-	if IsSecret(unit) or IsSecret(spellID) then return end
+	if IsSecret(unit) then return end
+	local resolved, readable = ResolveSpellID(spellID)
+	if resolved == nil then
+		if readable == false then InterruptTrack:OnUnknownCast(unit) end
+
+		return
+	end
+
+	spellID = resolved
 	local base = SPELLCDS[spellID]
 	if base == nil then return end
 	local owner = PETOWNER[unit] or unit
@@ -219,6 +309,7 @@ function InterruptTrack:OnCast(unit, spellID)
 	end
 
 	lastKicker = guid
+	if owner == "player" then InterruptTrack:SendKick(spellID, casted[key].duration) end
 	InterruptTrack:DEBUG("CAST", DebugValue(unit), DebugValue(spellID), DebugValue(guid))
 	if isNew then
 		InterruptTrack:UpdateRoster()
@@ -258,6 +349,27 @@ function InterruptTrack:OnInterrupted(unit, spellID)
 		InterruptTrack:DEBUG("INTERRUPTED ignored as duplicate")
 
 		return
+	end
+
+	local guid = nil
+	local newest = 0
+	for castGuid, castTime in pairs(unknownCasts) do
+		if now - castTime <= SUCCESSWINDOW and castTime > newest then
+			newest = castTime
+			guid = castGuid
+		end
+	end
+
+	if guid then
+		local target = FindReadyEntry(guid)
+		if target then
+			unknownCasts[guid] = nil
+			StartUnknownCooldown(target, newest, spellID, hasKicked)
+			InterruptTrack:DEBUG("INTERRUPTED attributed to unidentified cast", target.name)
+			InterruptTrack:UpdateBars()
+
+			return
+		end
 	end
 
 	pending.time = now
@@ -427,7 +539,9 @@ function InterruptTrack:UpdateBars()
 			end
 
 			local r, g, b, colorStr = InterruptTrack:GetClassColor(entry.class)
-			bar.name:SetText("|c" .. colorStr .. entry.name .. "|r")
+			local label = entry.name
+			if entry.unit ~= "player" and hasAddon[entry.name] ~= true then label = "?" .. label end
+			bar.name:SetText("|c" .. colorStr .. label .. "|r")
 			if running then
 				bar.status:SetValue(entry.remaining / entry.duration)
 				bar.status:SetStatusBarColor(r * 0.5, g * 0.5, b * 0.5)
@@ -586,19 +700,62 @@ function InterruptTrack:UpdatePlates()
 	end
 end
 
-function InterruptTrack:SendMark(active)
+local function Transmit(msg, channel)
+	local ok, ret = pcall(C_ChatInfo.SendAddonMessage, PREFIX, msg, channel)
+	if ok == false then return false end
+	if ret == 0 then
+		msgBlocked = false
+
+		return true
+	end
+
+	if ret == 11 then msgBlocked = true end
+
+	return false
+end
+
+local function IsInInstanceGroup()
+	if LE_PARTY_CATEGORY_INSTANCE == nil then return false end
+
+	return IsInGroup(LE_PARTY_CATEGORY_INSTANCE) == true
+end
+
+local function Send(msg)
 	if C_ChatInfo == nil or C_ChatInfo.SendAddonMessage == nil then return end
 	local channel = nil
-	if IsInRaid() then
+	if IsInInstanceGroup() then
+		channel = "INSTANCE_CHAT"
+	elseif IsInRaid() then
 		channel = "RAID"
 	elseif IsInGroup() then
 		channel = "PARTY"
 	end
 
 	if channel == nil then return end
-	local msg = "C"
-	if active then msg = "M" end
-	C_ChatInfo.SendAddonMessage(PREFIX, msg, channel)
+	Transmit(msg, channel)
+end
+
+function InterruptTrack:SendMark(active)
+	if active then
+		Send("M")
+	else
+		Send("C")
+	end
+end
+
+function InterruptTrack:SendKick(spellID, duration)
+	Send(format("K:%d:%.1f", spellID, duration))
+end
+
+function InterruptTrack:SendHello()
+	local now = GetTime()
+	if now - lastHello < 5 then return end
+	lastHello = now
+	Send("H")
+end
+
+function InterruptTrack:HasAddon(name)
+	return hasAddon[name] == true
 end
 
 function InterruptTrack:SetMark(active)
@@ -624,12 +781,37 @@ function InterruptTrack:OnAddonMessage(msg, sender)
 	if msg == nil or sender == nil then return end
 	local name = strsplit("-", sender)
 	if name == Safe(UnitName("player")) then return end
-	if msg == "C" then
+	hasAddon[name] = true
+	local cmd, a, b = strsplit(":", msg)
+	if cmd == "H" then return end
+	if cmd == "K" then
+		local spellID = tonumber(a)
+		local duration = tonumber(b)
+		if spellID == nil or duration == nil then return end
+		local unit = GetUnitByName(name)
+		if unit == nil then return end
+		local guid = Safe(UnitGUID(unit))
+		if guid == nil then return end
+		local key = GetKey(guid, spellID)
+		local isNew = casted[key] == nil
+		casted[key] = {["start"] = GetTime(), ["duration"] = duration}
+		lastKicker = guid
+		InterruptTrack:DEBUG("KICK from", name, spellID, duration)
+		if isNew then
+			InterruptTrack:UpdateRoster()
+		else
+			InterruptTrack:UpdateBars()
+		end
+
+		return
+	end
+
+	if cmd == "C" then
 		markers[name] = nil
-	else
-		local cmd = strsplit(":", msg)
-		if cmd ~= "M" then return end
+	elseif cmd == "M" then
 		markers[name] = true
+	else
+		return
 	end
 
 	InterruptTrack:UpdatePlates()
@@ -691,6 +873,7 @@ function InterruptTrack:CheckSecrets()
 	end
 
 	InterruptTrack:MSG("plate count", count)
+	InterruptTrack:MSG("group", tostring(IsInGroup()), "| instance group", tostring(IsInInstanceGroup()), "| messages blocked", tostring(msgBlocked))
 	for token, n in pairs(castStats) do
 		InterruptTrack:MSG("cast events", token, n)
 	end
@@ -817,7 +1000,19 @@ local function OnCastEvent(sel, event, unit, castGUID, spellID)
 	local key = "secret-unit"
 	if IsSecret(unit) == false then
 		key = unit
-		if IsSecret(spellID) then key = unit .. " (secret spell)" end
+		if IsSecret(spellID) then
+			key = unit .. " (secret id"
+			if C_Spell and C_Spell.GetSpellName then
+				local ok, name = pcall(C_Spell.GetSpellName, spellID)
+				if ok and name and IsSecret(name) == false then
+					key = key .. ", NAME OK)"
+				else
+					key = key .. ", name secret)"
+				end
+			else
+				key = key .. ")"
+			end
+		end
 	end
 
 	castStats[key] = (castStats[key] or 0) + 1
@@ -837,6 +1032,7 @@ InterruptTrack:RegisterEvent(eventFrame, "GROUP_ROSTER_UPDATE")
 InterruptTrack:RegisterEvent(eventFrame, "PLAYER_ROLES_ASSIGNED")
 InterruptTrack:RegisterEvent(eventFrame, "PLAYER_SPECIALIZATION_CHANGED")
 InterruptTrack:RegisterEvent(eventFrame, "UNIT_SPELLCAST_INTERRUPTED")
+InterruptTrack:RegisterEvent(eventFrame, "UNIT_SPELLCAST_CHANNEL_STOP")
 InterruptTrack:RegisterEvent(eventFrame, "NAME_PLATE_UNIT_ADDED")
 InterruptTrack:RegisterEvent(eventFrame, "NAME_PLATE_UNIT_REMOVED")
 InterruptTrack:RegisterEvent(eventFrame, "CHAT_MSG_ADDON")
@@ -847,6 +1043,12 @@ eventFrame:SetScript(
 			local unit, castGUID, spellID = ...
 			InterruptTrack:DEBUG("EVENT INTERRUPTED", DebugValue(unit), DebugValue(castGUID), DebugValue(spellID))
 			InterruptTrack:OnInterrupted(unit, spellID)
+		elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+			local unit, _, spellID, interruptedBy = ...
+			if interruptedBy ~= nil then
+				InterruptTrack:DEBUG("EVENT CHANNEL STOP", DebugValue(unit), DebugValue(spellID))
+				InterruptTrack:OnInterrupted(unit, spellID)
+			end
 		elseif event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" then
 			InterruptTrack:UpdatePlates()
 		elseif event == "CHAT_MSG_ADDON" then
