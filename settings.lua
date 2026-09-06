@@ -10,8 +10,16 @@ function InterruptTrack:ToggleSettings()
 end
 
 local function OnSlash(msg)
-	if msg and strlower(strtrim(msg)) == "debug" then
+	local cmd = ""
+	if msg then cmd = strlower(strtrim(msg)) end
+	if cmd == "debug" then
 		InterruptTrack:ToggleDebug()
+
+		return
+	end
+
+	if cmd == "check" then
+		InterruptTrack:CheckSecrets()
 
 		return
 	end
@@ -82,6 +90,18 @@ local function AddSlider(key, default, min, max, step, decimals, func)
 	})
 end
 
+local function AddKeybind(key, default, func)
+	itset:AddKeybind({
+		["label"] = "LID_" .. key,
+		["search"] = key,
+		["value"] = GetConfig(key, default),
+		["func"] = function(value)
+			InterruptTrack:SV(InterruptTrackG, key, value)
+			if func then func(value) end
+		end
+	})
+end
+
 local function AddDropdown(key, default, choices, func)
 	itset:AddDropdown({
 		["label"] = "LID_" .. key,
@@ -123,9 +143,10 @@ function InterruptTrack:InitSettings()
 		end
 	end)
 
+	AddKeybind("MARKKEY", nil, function() InterruptTrack:ApplyKeybind() end)
 	AddCategory("DISPLAY")
 	AddDropdown("SORTBY", "ROLE", InterruptTrack:GetSortModes(), function() InterruptTrack:UpdateBars() end)
-	AddCheckbox("KICKROTATION", false, function() InterruptTrack:UpdateBars() end)
+	AddCheckbox("KICKROTATION", true, function() InterruptTrack:UpdateBars() end)
 	AddCheckbox("SHOWRAIDMARK", true, function() InterruptTrack:UpdateMarks() end)
 	AddCategory("BAR", 2)
 	AddSlider("BARWIDTH", 200, 100, 400, 5, 0, function() InterruptTrack:ApplyLayout() end)
@@ -142,6 +163,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 		InterruptTrack:SetVersion(132219, "0.1.0")
 		InterruptTrack:InitSettings()
 		InterruptTrack:CreateMainFrame()
+		InterruptTrack:ApplyKeybind()
+		if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then C_ChatInfo.RegisterAddonMessagePrefix("InterruptTrack") end
 		InterruptTrack:AddSlash("interrupttrack", OnSlash)
 		InterruptTrack:CreateMinimapButton({
 			["name"] = "InterruptTrack",

@@ -20,7 +20,7 @@
 ## SavedVariablesPerCharacter: InterruptTrackC
 ## X-Curse-Project-ID: 1684295
 ## X-Wago-ID: kNM3gEKz
-## IconTexture: 
+## IconTexture: 132219
 
 libs\D4Lib\D4Lib.xml
 

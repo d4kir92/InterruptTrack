@@ -295,9 +295,9 @@ function InterruptTrack:CreateBar(index)
 	bar.time = bar.status:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	bar.time:SetPoint("RIGHT", bar.status, "RIGHT", -4, 0)
 	bar.time:SetJustifyH("RIGHT")
-	bar.glow = bar:CreateTexture(nil, "BACKGROUND", nil, -1)
-	bar.glow:SetColorTexture(1, 0.82, 0, 1)
-	bar.glow:Hide()
+	bar.circle = bar:CreateTexture(nil, "ARTWORK")
+	bar.circle:SetTexture("Interface\\COMMON\\Indicator-Green")
+	bar.circle:Hide()
 	bar.mark = bar:CreateTexture(nil, "ARTWORK")
 	bar.mark:Hide()
 	bars[index] = bar
@@ -323,9 +323,9 @@ function InterruptTrack:ApplyLayout()
 		bar.status:ClearAllPoints()
 		bar.status:SetPoint("TOPLEFT", bar, "TOPLEFT", height + 2, 0)
 		bar.status:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
-		bar.glow:ClearAllPoints()
-		bar.glow:SetPoint("TOPLEFT", bar, "TOPLEFT", -2, 2)
-		bar.glow:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 2, -2)
+		bar.circle:ClearAllPoints()
+		bar.circle:SetPoint("RIGHT", bar, "LEFT", -2, 0)
+		bar.circle:SetSize(height, height)
 		bar.mark:ClearAllPoints()
 		bar.mark:SetPoint("LEFT", bar, "RIGHT", 2, 0)
 		bar.mark:SetSize(height, height)
@@ -389,7 +389,7 @@ function InterruptTrack:UpdateBars()
 		entry.remaining, entry.duration = GetRemaining(entry)
 	end
 
-	local rotation = InterruptTrack:GV(GetDB(), "KICKROTATION", false)
+	local rotation = InterruptTrack:GV(GetDB(), "KICKROTATION", true)
 	local mode = InterruptTrack:GV(GetDB(), "SORTBY", "ROLE")
 	if rotation then mode = "ROTATION" end
 	local sorter = SORTERS[mode] or SORTERS["ROLE"]
@@ -400,9 +400,9 @@ function InterruptTrack:UpdateBars()
 		local bar = bars[i]
 		if bar then
 			if nextKicker ~= nil and entry.guid == nextKicker then
-				bar.glow:Show()
+				bar.circle:Show()
 			else
-				bar.glow:Hide()
+				bar.circle:Hide()
 			end
 			local cd = casted[entry.key]
 			local running = entry.remaining > 0 and entry.duration > 0
@@ -445,19 +445,239 @@ function InterruptTrack:UpdateBars()
 	end
 end
 
+local PREFIX = "InterruptTrack"
+local PLATEICONSIZE = 28
+local marks = {}
+local markBySender = {}
+local function FirstChar(name)
+	if name == nil or name == "" then return "" end
+	local b = strbyte(name, 1)
+	local len = 1
+	if b >= 240 then
+		len = 4
+	elseif b >= 224 then
+		len = 3
+	elseif b >= 192 then
+		len = 2
+	end
+
+	return strsub(name, 1, len)
+end
+
+local function GetPlateToken(plate)
+	local token = plate.namePlateUnitToken
+	if token == nil and plate.UnitFrame then token = plate.UnitFrame.unit end
+
+	return token
+end
+
+local function GetMySpecIcon()
+	if GetSpecialization and GetSpecializationInfo then
+		local spec = GetSpecialization()
+		if spec then
+			local _, _, _, icon = GetSpecializationInfo(spec)
+			if icon then return icon end
+		end
+	end
+
+	local _, class = UnitClass("player")
+
+	return InterruptTrack:GetClassIcon(class)
+end
+
+local function GetPlateMarkFrame(plate)
+	if plate.ITMark then return plate.ITMark end
+	local frame = CreateFrame("Frame", nil, plate)
+	frame:SetSize(PLATEICONSIZE, PLATEICONSIZE)
+	frame:SetPoint("LEFT", plate, "RIGHT", 6, 0)
+	frame.icon = frame:CreateTexture(nil, "ARTWORK")
+	frame.icon:SetAllPoints(frame)
+	frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	frame.text = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	frame.text:SetPoint("CENTER", frame, "CENTER", 0, 0)
+	frame:Hide()
+	plate.ITMark = frame
+
+	return frame
+end
+
+function InterruptTrack:UpdatePlates()
+	if C_NamePlate == nil then return end
+	for i, plate in pairs(C_NamePlate.GetNamePlates()) do
+		local token = GetPlateToken(plate)
+		local mark = nil
+		if token then
+			local guid = Safe(UnitGUID(token))
+			if guid then mark = marks[guid] end
+		end
+
+		local frame = GetPlateMarkFrame(plate)
+		if mark then
+			frame.icon:SetTexture(mark.icon)
+			frame.text:SetText(mark.initial)
+			frame:Show()
+		else
+			frame:Hide()
+		end
+	end
+end
+
+function InterruptTrack:ApplyMark(sender, guid, icon)
+	local old = markBySender[sender]
+	if old then marks[old] = nil end
+	if guid == nil then
+		markBySender[sender] = nil
+	else
+		markBySender[sender] = guid
+		marks[guid] = {["icon"] = icon, ["initial"] = FirstChar(sender), ["sender"] = sender}
+	end
+
+	InterruptTrack:UpdatePlates()
+end
+
+function InterruptTrack:SendMark(guid)
+	if C_ChatInfo == nil or C_ChatInfo.SendAddonMessage == nil then return end
+	local channel = nil
+	if IsInRaid() then
+		channel = "RAID"
+	elseif IsInGroup() then
+		channel = "PARTY"
+	end
+
+	if channel == nil then return end
+	local msg = "C"
+	if guid then msg = "M:" .. guid .. ":" .. tostring(GetMySpecIcon() or 0) end
+	C_ChatInfo.SendAddonMessage(PREFIX, msg, channel)
+end
+
+function InterruptTrack:SetMark(guid)
+	InterruptTrack.markGuid = guid
+	InterruptTrack:ApplyMark(UnitName("player"), guid, GetMySpecIcon())
+	InterruptTrack:SendMark(guid)
+end
+
+function InterruptTrack:OnAddonMessage(msg, sender)
+	if msg == nil or sender == nil then return end
+	local name = strsplit("-", sender)
+	if name == UnitName("player") then return end
+	if msg == "C" then
+		InterruptTrack:ApplyMark(name, nil, nil)
+
+		return
+	end
+
+	local cmd, guid, icon = strsplit(":", msg)
+	if cmd ~= "M" or guid == nil or guid == "" then return end
+	InterruptTrack:ApplyMark(name, guid, tonumber(icon))
+end
+
+local markButton = CreateFrame("Button", "ITMarkButton", UIParent)
+markButton:SetSize(1, 1)
+markButton:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -200, 200)
+markButton:SetAlpha(0)
+markButton:RegisterForClicks("AnyDown")
+markButton:SetScript("OnClick", function() InterruptTrack:MarkTarget() end)
+function InterruptTrack:ApplyKeybind()
+	if InCombatLockdown() then return end
+	ClearOverrideBindings(markButton)
+	local key = InterruptTrack:GV(GetDB(), "MARKKEY", nil)
+	if key == nil or key == "" then return end
+	SetOverrideBindingClick(markButton, true, key, "ITMarkButton")
+end
+
+local function GetTargetPlateUnit()
+	if C_NamePlate == nil then return nil end
+	if C_NamePlate.GetNamePlateForUnit then
+		local plate = C_NamePlate.GetNamePlateForUnit("target")
+		if plate and plate.namePlateUnitToken then return plate.namePlateUnitToken end
+	end
+
+	for i, plate in pairs(C_NamePlate.GetNamePlates()) do
+		local token = plate.namePlateUnitToken
+		if token == nil and plate.UnitFrame then token = plate.UnitFrame.unit end
+		if token and Safe(UnitIsUnit(token, "target"), false) == true then return token end
+	end
+
+	return nil
+end
+
+function InterruptTrack:MarkTarget()
+	if Safe(UnitExists("target"), true) ~= true then
+		InterruptTrack:MSG(InterruptTrack:Trans("LID_MARKNOTARGET"))
+
+		return
+	end
+
+	local token = GetTargetPlateUnit()
+	local guid = nil
+	local name = nil
+	if token then
+		guid = Safe(UnitGUID(token))
+		name = Safe(UnitName(token))
+	end
+
+	InterruptTrack:DEBUG("MARK", tostring(token), DebugValue(guid), DebugValue(name))
+	if guid == nil then
+		InterruptTrack:MSG(InterruptTrack:Trans("LID_MARKTARGETSECRET"))
+
+		return
+	end
+
+	if InterruptTrack.markGuid == guid then
+		InterruptTrack:SetMark(nil)
+		InterruptTrack:MSG(InterruptTrack:Trans("LID_MARKTARGETCLEARED"))
+
+		return
+	end
+
+	InterruptTrack:SetMark(guid)
+	InterruptTrack:MSG(InterruptTrack:Trans("LID_MARKTARGETSET"), name or guid)
+end
+
+function InterruptTrack:CheckSecrets()
+	InterruptTrack:MSG("target guid", DebugValue(UnitGUID("target")))
+	InterruptTrack:MSG("target name", DebugValue(UnitName("target")))
+	InterruptTrack:MSG("target mark", DebugValue(GetRaidTargetIndex("target")))
+	InterruptTrack:MSG("nameplate1 guid", DebugValue(UnitGUID("nameplate1")))
+	InterruptTrack:MSG("nameplate1 name", DebugValue(UnitName("nameplate1")))
+	InterruptTrack:MSG("nameplate1 is target", DebugValue(UnitIsUnit("nameplate1", "target")))
+	InterruptTrack:MSG("party1target guid", DebugValue(UnitGUID("party1target")))
+end
+
+local markedPlates = {}
+local function BuildMarkedPlates()
+	wipe(markedPlates)
+	if C_NamePlate == nil then return end
+	for i, plate in pairs(C_NamePlate.GetNamePlates()) do
+		local token = GetPlateToken(plate)
+		if token then
+			local index = Safe(GetRaidTargetIndex(token))
+			if index then tinsert(markedPlates, {["token"] = token, ["index"] = index}) end
+		end
+	end
+end
+
+local function GetTargetMark(unit)
+	if #markedPlates == 0 then return nil end
+	local target = "target"
+	if unit ~= "player" then target = unit .. "target" end
+	if Safe(UnitExists(target), true) ~= true then return nil end
+	for i, tab in ipairs(markedPlates) do
+		if Safe(UnitIsUnit(tab.token, target), false) == true then return tab.index end
+	end
+
+	return nil
+end
+
 function InterruptTrack:UpdateMarks()
 	if self.frame == nil then return end
 	local show = InterruptTrack:GV(GetDB(), "SHOWRAIDMARK", true)
+	if show then BuildMarkedPlates() end
 	for i, entry in ipairs(entries) do
 		local bar = bars[i]
 		if bar then
 			local index = nil
-			if show then
-				local target = "target"
-				if entry.unit ~= "player" then target = entry.unit .. "target" end
-				index = Safe(GetRaidTargetIndex(target))
-			end
-
+			if show then index = GetTargetMark(entry.unit) end
 			if index ~= bar.markIndex then
 				bar.markIndex = index
 				if index then
@@ -546,6 +766,9 @@ InterruptTrack:RegisterEvent(eventFrame, "PLAYER_ROLES_ASSIGNED")
 InterruptTrack:RegisterEvent(eventFrame, "PLAYER_SPECIALIZATION_CHANGED")
 InterruptTrack:RegisterEvent(eventFrame, "UNIT_SPELLCAST_SUCCEEDED")
 InterruptTrack:RegisterEvent(eventFrame, "UNIT_SPELLCAST_INTERRUPTED")
+InterruptTrack:RegisterEvent(eventFrame, "NAME_PLATE_UNIT_ADDED")
+InterruptTrack:RegisterEvent(eventFrame, "NAME_PLATE_UNIT_REMOVED")
+InterruptTrack:RegisterEvent(eventFrame, "CHAT_MSG_ADDON")
 eventFrame:SetScript(
 	"OnEvent",
 	function(sel, event, ...)
@@ -556,6 +779,11 @@ eventFrame:SetScript(
 			local unit, castGUID, spellID = ...
 			InterruptTrack:DEBUG("EVENT INTERRUPTED", DebugValue(unit), DebugValue(castGUID), DebugValue(spellID))
 			InterruptTrack:OnInterrupted(unit, spellID)
+		elseif event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" then
+			InterruptTrack:UpdatePlates()
+		elseif event == "CHAT_MSG_ADDON" then
+			local prefix, msg, _, sender = ...
+			if prefix == PREFIX then InterruptTrack:OnAddonMessage(msg, sender) end
 		else
 			InterruptTrack:UpdateRoster()
 		end
