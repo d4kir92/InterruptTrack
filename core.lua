@@ -20,13 +20,13 @@ local PETOWNER = {
 local INTERRUPTS = {
 	["DEATHKNIGHT"] = {{47528, 15}},
 	["DEMONHUNTER"] = {{183752, 15}},
-	["DRUID"] = {{106839, 15}, {78675, 60}},
+	["DRUID"] = {{106839, 15}, {78675, 60, true}},
 	["EVOKER"] = {{351338, 40}},
-	["HUNTER"] = {{147362, 24}, {187707, 15}},
+	["HUNTER"] = {{147362, 24}, {187707, 15, true}},
 	["MAGE"] = {{2139, 24}},
 	["MONK"] = {{116705, 15}},
-	["PALADIN"] = {{96231, 15}},
-	["PRIEST"] = {{15487, 45}},
+	["PALADIN"] = {{96231, 15}, {31935, 15, true}},
+	["PRIEST"] = {{15487, 45, true}},
 	["ROGUE"] = {{1766, 15}},
 	["SHAMAN"] = {{57994, 12}},
 	["WARLOCK"] = {{19647, 24}},
@@ -46,25 +46,41 @@ SORTERS["ROLE"] = function(a, b)
 	local ra = ROLEORDER[a.role] or 4
 	local rb = ROLEORDER[b.role] or 4
 	if ra ~= rb then return ra < rb end
+	if a.name ~= b.name then return a.name < b.name end
 
-	return a.name < b.name
+	return a.spellID < b.spellID
 end
 
 SORTERS["COOLDOWN"] = function(a, b)
 	if a.remaining ~= b.remaining then return a.remaining < b.remaining end
+	if a.name ~= b.name then return a.name < b.name end
 
-	return a.name < b.name
+	return a.spellID < b.spellID
 end
 
+local MINRATIO = 0.6
+local SUCCESSWINDOW = 0.5
 local entries = {}
 local bars = {}
 local casted = {}
-local lastSpell = {}
+local learned = {}
+local pending = {}
 local elapsed = 0
+local debug = false
 local function GetDB()
 	InterruptTrackG = InterruptTrackG or {}
 
 	return InterruptTrackG
+end
+
+local function IsSecret(value)
+	return issecretvalue ~= nil and issecretvalue(value) == true
+end
+
+local function Safe(value, fallback)
+	if value == nil or IsSecret(value) then return fallback end
+
+	return value
 end
 
 local function IsKnown(spellID)
@@ -74,25 +90,27 @@ local function IsKnown(spellID)
 	return false
 end
 
-local function GetKnownSpell(list)
+local function HasKnownSpell(list)
 	for i, tab in ipairs(list) do
-		if IsKnown(tab[1]) then return tab[1] end
+		if Safe(IsKnown(tab[1]), false) == true then return true end
 	end
 
-	return nil
+	return false
 end
 
-local function GetSpellCooldownInfo(spellID)
-	if C_Spell and C_Spell.GetSpellCooldown then
-		local info = C_Spell.GetSpellCooldown(spellID)
-		if info then return info.startTime, info.duration end
+local function GetKey(guid, spellID)
+	return guid .. "-" .. spellID
+end
 
-		return nil
-	end
+local function DebugValue(value)
+	if IsSecret(value) then return "<secret>" end
 
-	if GetSpellCooldown then return GetSpellCooldown(spellID) end
+	return tostring(value)
+end
 
-	return nil
+function InterruptTrack:DEBUG(...)
+	if debug == false then return end
+	InterruptTrack:MSG(...)
 end
 
 function InterruptTrack:GetSortModes()
@@ -105,28 +123,41 @@ end
 function InterruptTrack:UpdateRoster()
 	wipe(entries)
 	for i, unit in ipairs(UNITS) do
-		if UnitExists(unit) and UnitIsPlayer(unit) then
+		if Safe(UnitExists(unit), false) and Safe(UnitIsPlayer(unit), false) then
 			local _, class = UnitClass(unit)
+			class = Safe(class)
 			local list = INTERRUPTS[class]
-			local guid = UnitGUID(unit)
+			local guid = Safe(UnitGUID(unit))
 			if list and guid then
-				local spellID = nil
-				if unit == "player" then spellID = GetKnownSpell(list) end
-				spellID = spellID or lastSpell[guid] or list[1][1]
-				tinsert(
-					entries,
-					{
-						["unit"] = unit,
-						["guid"] = guid,
-						["name"] = UnitName(unit) or unit,
-						["class"] = class,
-						["role"] = InterruptTrack:GetRole(unit),
-						["spellID"] = spellID,
-						["known"] = unit == "player" and IsKnown(spellID) or false,
-						["remaining"] = 0,
-						["duration"] = 0
-					}
-				)
+				local name = Safe(UnitName(unit), unit)
+				local role = Safe(InterruptTrack:GetRole(unit), "NONE")
+				local filter = unit == "player" and HasKnownSpell(list)
+				for x, tab in ipairs(list) do
+					local key = GetKey(guid, tab[1])
+					local show = true
+					if filter then
+						show = Safe(IsKnown(tab[1]), false) == true
+					elseif tab[3] == true then
+						show = casted[key] ~= nil
+					end
+
+					if show then
+						tinsert(
+							entries,
+							{
+								["unit"] = unit,
+								["guid"] = guid,
+								["key"] = key,
+								["name"] = name,
+								["class"] = class,
+								["role"] = role,
+								["spellID"] = tab[1],
+								["remaining"] = 0,
+								["duration"] = 0
+							}
+						)
+					end
+				end
 			end
 		end
 	end
@@ -136,38 +167,81 @@ function InterruptTrack:UpdateRoster()
 end
 
 function InterruptTrack:OnCast(unit, spellID)
-	local duration = SPELLCDS[spellID]
-	if duration == nil then return end
+	if IsSecret(unit) or IsSecret(spellID) then return end
+	local base = SPELLCDS[spellID]
+	if base == nil then return end
 	local owner = PETOWNER[unit] or unit
 	if UNITMAP[owner] == nil then return end
-	local guid = UnitGUID(owner)
+	local guid = Safe(UnitGUID(owner))
 	if guid == nil then return end
-	lastSpell[guid] = spellID
-	casted[guid] = {["spellID"] = spellID, ["start"] = GetTime(), ["duration"] = duration}
+	local key = GetKey(guid, spellID)
+	local now = GetTime()
+	local isNew = casted[key] == nil
+	if isNew == false then
+		local measured = now - casted[key].start
+		if measured >= base * MINRATIO and measured < (learned[key] or base) then learned[key] = measured end
+	end
+
+	casted[key] = {["start"] = now, ["duration"] = learned[key] or base}
+	if pending.time ~= nil and now - pending.time <= SUCCESSWINDOW then
+		casted[key].success = true
+		casted[key].kicked = pending.kicked
+		casted[key].hasKicked = pending.hasKicked
+		pending.time = nil
+		InterruptTrack:DEBUG("CAST matched pending interrupt", DebugValue(spellID))
+	end
+
+	InterruptTrack:DEBUG("CAST", DebugValue(unit), DebugValue(spellID), DebugValue(guid))
+	if isNew then
+		InterruptTrack:UpdateRoster()
+	else
+		InterruptTrack:UpdateBars()
+	end
+end
+
+function InterruptTrack:OnInterrupted(unit, spellID)
+	if IsSecret(unit) == false and (UNITMAP[unit] ~= nil or PETOWNER[unit] ~= nil) then return end
+	local now = GetTime()
+	local hasKicked = IsSecret(spellID) or spellID ~= nil
+	local matched = false
+	local duplicate = false
 	for i, entry in ipairs(entries) do
-		if entry.guid == guid then
-			entry.spellID = spellID
-			entry.known = entry.unit == "player" and IsKnown(spellID) or false
+		local cd = casted[entry.key]
+		if cd ~= nil and now - cd.start <= SUCCESSWINDOW then
+			if cd.success == true then
+				duplicate = true
+			else
+				cd.success = true
+				cd.kicked = spellID
+				cd.hasKicked = hasKicked
+				matched = true
+			end
 		end
 	end
 
-	InterruptTrack:UpdateBars()
+	if matched then
+		InterruptTrack:DEBUG("INTERRUPTED matched a running cooldown")
+		InterruptTrack:UpdateBars()
+
+		return
+	end
+
+	if duplicate then
+		InterruptTrack:DEBUG("INTERRUPTED ignored as duplicate")
+
+		return
+	end
+
+	pending.time = now
+	pending.kicked = spellID
+	pending.hasKicked = hasKicked
+	InterruptTrack:DEBUG("INTERRUPTED stored as pending")
 end
 
 local function GetRemaining(entry)
 	local now = GetTime()
-	if entry.unit == "player" and entry.known then
-		local start, duration = GetSpellCooldownInfo(entry.spellID)
-		if start and duration and start > 0 and duration > 2 then
-			local remaining = start + duration - now
-			if remaining > 0 then return remaining, duration end
-		end
-
-		if start then return 0, 0 end
-	end
-
-	local cd = casted[entry.guid]
-	if cd and cd.spellID == entry.spellID then
+	local cd = casted[entry.key]
+	if cd then
 		local remaining = cd.start + cd.duration - now
 		if remaining > 0 then return remaining, cd.duration end
 	end
@@ -231,6 +305,14 @@ function InterruptTrack:ApplyLayout()
 	self.frame:SetSize(width, count * (height + spacing) - spacing)
 end
 
+local function SetKickedIcon(bar, spellID)
+	if C_Spell == nil or C_Spell.GetSpellTexture == nil then return false end
+	local ok, err = pcall(function() bar.icon:SetTexture(C_Spell.GetSpellTexture(spellID)) end)
+	if ok == false then InterruptTrack:DEBUG("KICKED ICON FAILED", tostring(err)) end
+
+	return ok
+end
+
 function InterruptTrack:UpdateBars()
 	if self.frame == nil then return end
 	for i, entry in ipairs(entries) do
@@ -242,22 +324,42 @@ function InterruptTrack:UpdateBars()
 	for i, entry in ipairs(entries) do
 		local bar = bars[i]
 		if bar then
-			if bar.spellID ~= entry.spellID then
-				bar.spellID = entry.spellID
+			local cd = casted[entry.key]
+			local running = entry.remaining > 0 and entry.duration > 0
+			local wantKicked = running and cd ~= nil and cd.hasKicked == true
+			if wantKicked and bar.showKicked ~= true then
+				if SetKickedIcon(bar, cd.kicked) then
+					bar.showKicked = true
+					bar.iconID = nil
+				else
+					cd.hasKicked = false
+					wantKicked = false
+				end
+			end
+
+			if wantKicked == false and bar.iconID ~= entry.spellID then
+				bar.showKicked = false
+				bar.iconID = entry.spellID
 				local _, _, icon = InterruptTrack:GetSpellInfo(entry.spellID)
 				bar.icon:SetTexture(icon)
 			end
 
 			local r, g, b, colorStr = InterruptTrack:GetClassColor(entry.class)
 			bar.name:SetText("|c" .. colorStr .. entry.name .. "|r")
-			if entry.remaining > 0 and entry.duration > 0 then
-				bar.status:SetValue(1 - entry.remaining / entry.duration)
+			if running then
+				bar.status:SetValue(entry.remaining / entry.duration)
 				bar.status:SetStatusBarColor(r * 0.5, g * 0.5, b * 0.5)
 				bar.time:SetText(format("%.1f", entry.remaining))
+				if cd and cd.success then
+					bar.time:SetTextColor(0.2, 1, 0.2)
+				else
+					bar.time:SetTextColor(1, 0.3, 0.3)
+				end
 			else
 				bar.status:SetValue(1)
 				bar.status:SetStatusBarColor(r, g, b)
 				bar.time:SetText(InterruptTrack:Trans("LID_READY"))
+				bar.time:SetTextColor(0.2, 1, 0.2)
 			end
 		end
 	end
@@ -330,14 +432,25 @@ InterruptTrack:RegisterEvent(eventFrame, "GROUP_ROSTER_UPDATE")
 InterruptTrack:RegisterEvent(eventFrame, "PLAYER_ROLES_ASSIGNED")
 InterruptTrack:RegisterEvent(eventFrame, "PLAYER_SPECIALIZATION_CHANGED")
 InterruptTrack:RegisterEvent(eventFrame, "UNIT_SPELLCAST_SUCCEEDED")
+InterruptTrack:RegisterEvent(eventFrame, "UNIT_SPELLCAST_INTERRUPTED")
 eventFrame:SetScript(
 	"OnEvent",
 	function(sel, event, ...)
 		if event == "UNIT_SPELLCAST_SUCCEEDED" then
 			local unit, _, spellID = ...
 			InterruptTrack:OnCast(unit, spellID)
+		elseif event == "UNIT_SPELLCAST_INTERRUPTED" then
+			local unit, castGUID, spellID = ...
+			InterruptTrack:DEBUG("EVENT INTERRUPTED", DebugValue(unit), DebugValue(castGUID), DebugValue(spellID))
+			InterruptTrack:OnInterrupted(unit, spellID)
 		else
 			InterruptTrack:UpdateRoster()
 		end
 	end
 )
+
+function InterruptTrack:ToggleDebug()
+	debug = not debug
+	local valid = C_EventUtils ~= nil and C_EventUtils.IsEventValid("UNIT_SPELLCAST_INTERRUPTED")
+	InterruptTrack:MSG("DEBUG", tostring(debug), "| EVENT VALID", tostring(valid), "| REGISTERED", tostring(eventFrame:IsEventRegistered("UNIT_SPELLCAST_INTERRUPTED")), "| MY GUID", DebugValue(UnitGUID("player")))
+end

@@ -9,6 +9,16 @@ function InterruptTrack:ToggleSettings()
 	itset:Toggle()
 end
 
+local function OnSlash(msg)
+	if msg and strlower(strtrim(msg)) == "debug" then
+		InterruptTrack:ToggleDebug()
+
+		return
+	end
+
+	InterruptTrack:ToggleSettings()
+end
+
 local function GetCollapsed(key)
 	if key == nil then return nil end
 	if type(InterruptTrackG) ~= "table" then return nil end
@@ -130,7 +140,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 		InterruptTrack:SetVersion(132219, "0.1.0")
 		InterruptTrack:InitSettings()
 		InterruptTrack:CreateMainFrame()
-		InterruptTrack:AddSlash("interrupttrack", InterruptTrack.ToggleSettings)
+		InterruptTrack:AddSlash("interrupttrack", OnSlash)
 		InterruptTrack:CreateMinimapButton({
 			["name"] = "InterruptTrack",
 			["icon"] = 132219,
