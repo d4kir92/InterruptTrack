@@ -1,2 +1,16 @@
 -- ruRU Русский Russian
 local _, InterruptTrack = ...
+InterruptTrack:AddTrans("ruRU", "LID_GENERAL", "Общее")
+InterruptTrack:AddTrans("ruRU", "LID_DISPLAY", "Отображение")
+InterruptTrack:AddTrans("ruRU", "LID_BAR", "Полоса")
+InterruptTrack:AddTrans("ruRU", "LID_MMBTN", "Показывать кнопку миникарты")
+InterruptTrack:AddTrans("ruRU", "LID_SORTBY", "Сортировать по")
+InterruptTrack:AddTrans("ruRU", "LID_SORTBYROLE", "Роль")
+InterruptTrack:AddTrans("ruRU", "LID_SORTBYCOOLDOWN", "Восстановление")
+InterruptTrack:AddTrans("ruRU", "LID_BARWIDTH", "Ширина полосы: %d")
+InterruptTrack:AddTrans("ruRU", "LID_BARHEIGHT", "Высота полосы: %d")
+InterruptTrack:AddTrans("ruRU", "LID_BARSPACING", "Расстояние между полосами: %d")
+InterruptTrack:AddTrans("ruRU", "LID_READY", "ГОТОВО")
+InterruptTrack:AddTrans("ruRU", "LID_MINIMAPBUTTONISNOWHIDDEN", "Кнопка миникарты теперь скрыта.")
+InterruptTrack:AddTrans("ruRU", "LID_CANTBEMOVEDINCOMBAT", "Нельзя перемещать в бою.")
+InterruptTrack:AddTrans("ruRU", "LID_SAVEDNEWPOSITION", "Новая позиция сохранена.")

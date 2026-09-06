@@ -1,2 +1,16 @@
 -- frFR Français French
 local _, InterruptTrack = ...
+InterruptTrack:AddTrans("frFR", "LID_GENERAL", "Général")
+InterruptTrack:AddTrans("frFR", "LID_DISPLAY", "Affichage")
+InterruptTrack:AddTrans("frFR", "LID_BAR", "Barre")
+InterruptTrack:AddTrans("frFR", "LID_MMBTN", "Afficher le bouton de la minicarte")
+InterruptTrack:AddTrans("frFR", "LID_SORTBY", "Trier par")
+InterruptTrack:AddTrans("frFR", "LID_SORTBYROLE", "Rôle")
+InterruptTrack:AddTrans("frFR", "LID_SORTBYCOOLDOWN", "Temps de recharge")
+InterruptTrack:AddTrans("frFR", "LID_BARWIDTH", "Largeur de barre : %d")
+InterruptTrack:AddTrans("frFR", "LID_BARHEIGHT", "Hauteur de barre : %d")
+InterruptTrack:AddTrans("frFR", "LID_BARSPACING", "Espacement des barres : %d")
+InterruptTrack:AddTrans("frFR", "LID_READY", "PRÊT")
+InterruptTrack:AddTrans("frFR", "LID_MINIMAPBUTTONISNOWHIDDEN", "Le bouton de la minicarte est maintenant masqué.")
+InterruptTrack:AddTrans("frFR", "LID_CANTBEMOVEDINCOMBAT", "Impossible de déplacer en combat.")
+InterruptTrack:AddTrans("frFR", "LID_SAVEDNEWPOSITION", "Nouvelle position enregistrée.")

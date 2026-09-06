@@ -1,2 +1,16 @@
 -- itIT Italiano Italian
 local _, InterruptTrack = ...
+InterruptTrack:AddTrans("itIT", "LID_GENERAL", "Generale")
+InterruptTrack:AddTrans("itIT", "LID_DISPLAY", "Visualizzazione")
+InterruptTrack:AddTrans("itIT", "LID_BAR", "Barra")
+InterruptTrack:AddTrans("itIT", "LID_MMBTN", "Mostra pulsante minimappa")
+InterruptTrack:AddTrans("itIT", "LID_SORTBY", "Ordina per")
+InterruptTrack:AddTrans("itIT", "LID_SORTBYROLE", "Ruolo")
+InterruptTrack:AddTrans("itIT", "LID_SORTBYCOOLDOWN", "Recupero")
+InterruptTrack:AddTrans("itIT", "LID_BARWIDTH", "Larghezza barra: %d")
+InterruptTrack:AddTrans("itIT", "LID_BARHEIGHT", "Altezza barra: %d")
+InterruptTrack:AddTrans("itIT", "LID_BARSPACING", "Spaziatura barre: %d")
+InterruptTrack:AddTrans("itIT", "LID_READY", "PRONTO")
+InterruptTrack:AddTrans("itIT", "LID_MINIMAPBUTTONISNOWHIDDEN", "Il pulsante della minimappa ora è nascosto.")
+InterruptTrack:AddTrans("itIT", "LID_CANTBEMOVEDINCOMBAT", "Non può essere spostato in combattimento.")
+InterruptTrack:AddTrans("itIT", "LID_SAVEDNEWPOSITION", "Nuova posizione salvata.")

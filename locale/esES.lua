@@ -1,2 +1,16 @@
 -- esES Español Spanish
 local _, InterruptTrack = ...
+InterruptTrack:AddTrans("esES", "LID_GENERAL", "General")
+InterruptTrack:AddTrans("esES", "LID_DISPLAY", "Visualización")
+InterruptTrack:AddTrans("esES", "LID_BAR", "Barra")
+InterruptTrack:AddTrans("esES", "LID_MMBTN", "Mostrar botón del minimapa")
+InterruptTrack:AddTrans("esES", "LID_SORTBY", "Ordenar por")
+InterruptTrack:AddTrans("esES", "LID_SORTBYROLE", "Rol")
+InterruptTrack:AddTrans("esES", "LID_SORTBYCOOLDOWN", "Reutilización")
+InterruptTrack:AddTrans("esES", "LID_BARWIDTH", "Ancho de barra: %d")
+InterruptTrack:AddTrans("esES", "LID_BARHEIGHT", "Altura de barra: %d")
+InterruptTrack:AddTrans("esES", "LID_BARSPACING", "Espaciado de barras: %d")
+InterruptTrack:AddTrans("esES", "LID_READY", "LISTO")
+InterruptTrack:AddTrans("esES", "LID_MINIMAPBUTTONISNOWHIDDEN", "El botón del minimapa ahora está oculto.")
+InterruptTrack:AddTrans("esES", "LID_CANTBEMOVEDINCOMBAT", "No se puede mover en combate.")
+InterruptTrack:AddTrans("esES", "LID_SAVEDNEWPOSITION", "Nueva posición guardada.")

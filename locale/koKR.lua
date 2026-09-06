@@ -1,2 +1,16 @@
 -- koKR 한국어 Korean
 local _, InterruptTrack = ...
+InterruptTrack:AddTrans("koKR", "LID_GENERAL", "일반")
+InterruptTrack:AddTrans("koKR", "LID_DISPLAY", "표시")
+InterruptTrack:AddTrans("koKR", "LID_BAR", "바")
+InterruptTrack:AddTrans("koKR", "LID_MMBTN", "미니맵 버튼 표시")
+InterruptTrack:AddTrans("koKR", "LID_SORTBY", "정렬 기준")
+InterruptTrack:AddTrans("koKR", "LID_SORTBYROLE", "역할")
+InterruptTrack:AddTrans("koKR", "LID_SORTBYCOOLDOWN", "재사용 대기시간")
+InterruptTrack:AddTrans("koKR", "LID_BARWIDTH", "바 너비: %d")
+InterruptTrack:AddTrans("koKR", "LID_BARHEIGHT", "바 높이: %d")
+InterruptTrack:AddTrans("koKR", "LID_BARSPACING", "바 간격: %d")
+InterruptTrack:AddTrans("koKR", "LID_READY", "준비됨")
+InterruptTrack:AddTrans("koKR", "LID_MINIMAPBUTTONISNOWHIDDEN", "미니맵 버튼이 숨겨졌습니다.")
+InterruptTrack:AddTrans("koKR", "LID_CANTBEMOVEDINCOMBAT", "전투 중에는 이동할 수 없습니다.")
+InterruptTrack:AddTrans("koKR", "LID_SAVEDNEWPOSITION", "새 위치가 저장되었습니다.")

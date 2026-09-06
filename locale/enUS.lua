@@ -1,2 +1,16 @@
 -- enUS English
 local _, InterruptTrack = ...
+InterruptTrack:AddTrans("enUS", "LID_GENERAL", "General")
+InterruptTrack:AddTrans("enUS", "LID_DISPLAY", "Display")
+InterruptTrack:AddTrans("enUS", "LID_BAR", "Bar")
+InterruptTrack:AddTrans("enUS", "LID_MMBTN", "Show Minimap Button")
+InterruptTrack:AddTrans("enUS", "LID_SORTBY", "Sort By")
+InterruptTrack:AddTrans("enUS", "LID_SORTBYROLE", "Role")
+InterruptTrack:AddTrans("enUS", "LID_SORTBYCOOLDOWN", "Cooldown")
+InterruptTrack:AddTrans("enUS", "LID_BARWIDTH", "Bar Width: %d")
+InterruptTrack:AddTrans("enUS", "LID_BARHEIGHT", "Bar Height: %d")
+InterruptTrack:AddTrans("enUS", "LID_BARSPACING", "Bar Spacing: %d")
+InterruptTrack:AddTrans("enUS", "LID_READY", "READY")
+InterruptTrack:AddTrans("enUS", "LID_MINIMAPBUTTONISNOWHIDDEN", "Minimapbutton is now hidden.")
+InterruptTrack:AddTrans("enUS", "LID_CANTBEMOVEDINCOMBAT", "Can't be moved in combat.")
+InterruptTrack:AddTrans("enUS", "LID_SAVEDNEWPOSITION", "Saved new position.")

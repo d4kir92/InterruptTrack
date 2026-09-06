@@ -1,2 +1,16 @@
 -- deDE Deutsch German
 local _, InterruptTrack = ...
+InterruptTrack:AddTrans("deDE", "LID_GENERAL", "Allgemein")
+InterruptTrack:AddTrans("deDE", "LID_DISPLAY", "Anzeige")
+InterruptTrack:AddTrans("deDE", "LID_BAR", "Leiste")
+InterruptTrack:AddTrans("deDE", "LID_MMBTN", "Minimapknopf anzeigen")
+InterruptTrack:AddTrans("deDE", "LID_SORTBY", "Sortieren nach")
+InterruptTrack:AddTrans("deDE", "LID_SORTBYROLE", "Rolle")
+InterruptTrack:AddTrans("deDE", "LID_SORTBYCOOLDOWN", "Abklingzeit")
+InterruptTrack:AddTrans("deDE", "LID_BARWIDTH", "Leistenbreite: %d")
+InterruptTrack:AddTrans("deDE", "LID_BARHEIGHT", "Leistenhöhe: %d")
+InterruptTrack:AddTrans("deDE", "LID_BARSPACING", "Leistenabstand: %d")
+InterruptTrack:AddTrans("deDE", "LID_READY", "BEREIT")
+InterruptTrack:AddTrans("deDE", "LID_MINIMAPBUTTONISNOWHIDDEN", "Minimapknopf ist jetzt versteckt.")
+InterruptTrack:AddTrans("deDE", "LID_CANTBEMOVEDINCOMBAT", "Kann im Kampf nicht bewegt werden.")
+InterruptTrack:AddTrans("deDE", "LID_SAVEDNEWPOSITION", "Neue Position gespeichert.")
