@@ -24,8 +24,8 @@
 ## DefaultState: enabled
 ## SavedVariables: InterruptTrackG
 ## SavedVariablesPerCharacter: InterruptTrackC
-## X-Curse-Project-ID: 1638833
-## X-Wago-ID: 
+## X-Curse-Project-ID: 1684295
+## X-Wago-ID: kNM3gEKz
 ## IconTexture: 
 
 libs\D4Lib\D4Lib.xml
