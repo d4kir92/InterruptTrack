@@ -164,7 +164,11 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 		InterruptTrack:InitSettings()
 		InterruptTrack:CreateMainFrame()
 		InterruptTrack:ApplyKeybind()
-		if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then C_ChatInfo.RegisterAddonMessagePrefix("InterruptTrack") end
+		if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
+			C_ChatInfo.RegisterAddonMessagePrefix("InterruptTrack")
+			C_ChatInfo.RegisterAddonMessagePrefix("BliZziIT")
+			C_ChatInfo.RegisterAddonMessagePrefix("LibSpec")
+		end
 		InterruptTrack:AddSlash("interrupttrack", OnSlash)
 		InterruptTrack:CreateMinimapButton({
 			["name"] = "InterruptTrack",

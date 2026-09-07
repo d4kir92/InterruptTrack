@@ -34,6 +34,21 @@ local INTERRUPTS = {
 	["WARRIOR"] = {{6552, 15}}
 }
 
+local SPECINTERRUPTS = {
+	[102] = {78675, 106839},
+	[103] = {106839},
+	[104] = {106839},
+	[105] = {106839},
+	[253] = {147362},
+	[254] = {147362},
+	[255] = {187707},
+	[65] = {96231},
+	[66] = {31935, 96231},
+	[70] = {96231},
+	[256] = {},
+	[257] = {},
+	[258] = {15487}
+}
 local TRAVELTIME = {[31935] = 2, [147362] = 2}
 local SPELLCDS = {}
 for class, list in pairs(INTERRUPTS) do
@@ -88,6 +103,8 @@ local pending = {}
 local castStats = {}
 local unknownCasts = {}
 local hasAddon = {}
+local hasBliZzi = {}
+local specs = {}
 local lastHello = 0
 local msgBlocked = false
 local elapsed = 0
@@ -108,6 +125,12 @@ local function Safe(value, fallback)
 	if value == nil or IsSecret(value) then return fallback end
 
 	return value
+end
+
+local function IsInInstanceGroup()
+	if LE_PARTY_CATEGORY_INSTANCE == nil then return false end
+
+	return IsInGroup(LE_PARTY_CATEGORY_INSTANCE) == true
 end
 
 local function IsKnown(spellID)
@@ -153,6 +176,12 @@ function InterruptTrack:GetSortModes()
 end
 
 function InterruptTrack:UpdateRoster()
+	if IsInGroup() == false and IsInInstanceGroup() == false then
+		wipe(hasAddon)
+		wipe(hasBliZzi)
+		wipe(specs)
+	end
+
 	wipe(entries)
 	for i, unit in ipairs(UNITS) do
 		if Safe(UnitExists(unit), false) and Safe(UnitIsPlayer(unit), false) then
@@ -164,11 +193,15 @@ function InterruptTrack:UpdateRoster()
 				local name = Safe(UnitName(unit), unit)
 				local role = Safe(InterruptTrack:GetRole(unit), "NONE")
 				local filter = unit == "player" and HasKnownSpell(list)
+				local allow = nil
+				if filter == false then allow = SPECINTERRUPTS[specs[name]] end
 				for x, tab in ipairs(list) do
 					local key = GetKey(guid, tab[1])
 					local show = true
 					if filter then
 						show = Safe(IsKnown(tab[1]), false) == true
+					elseif allow then
+						show = tContains(allow, tab[1])
 					elseif tab[3] == true then
 						show = casted[key] ~= nil
 					end
@@ -540,7 +573,8 @@ function InterruptTrack:UpdateBars()
 
 			local r, g, b, colorStr = InterruptTrack:GetClassColor(entry.class)
 			local label = entry.name
-			if entry.unit ~= "player" and hasAddon[entry.name] ~= true then label = "?" .. label end
+			if entry.unit == "player" or hasAddon[entry.name] == true then label = "[I]" .. label end
+			if hasBliZzi[entry.name] == true then label = "[B]" .. label end
 			bar.name:SetText("|c" .. colorStr .. label .. "|r")
 			if running then
 				bar.status:SetValue(entry.remaining / entry.duration)
@@ -562,6 +596,8 @@ function InterruptTrack:UpdateBars()
 end
 
 local PREFIX = "InterruptTrack"
+local BLIZZIPREFIX = "BliZziIT"
+local SPECPREFIX = "LibSpec"
 local PLATEICONSIZE = 28
 local PLATEICONOFFSET = 20
 local markers = {}
@@ -714,12 +750,6 @@ local function Transmit(msg, channel)
 	return false
 end
 
-local function IsInInstanceGroup()
-	if LE_PARTY_CATEGORY_INSTANCE == nil then return false end
-
-	return IsInGroup(LE_PARTY_CATEGORY_INSTANCE) == true
-end
-
 local function Send(msg)
 	if C_ChatInfo == nil or C_ChatInfo.SendAddonMessage == nil then return end
 	local channel = nil
@@ -775,6 +805,26 @@ function InterruptTrack:IsMarking()
 	local me = Safe(UnitName("player"))
 
 	return me ~= nil and markers[me] ~= nil
+end
+
+function InterruptTrack:OnSpecMessage(msg, sender)
+	if msg == nil or sender == nil then return end
+	local spec = tonumber(strmatch(msg, "^(%d+),"))
+	if spec == nil then return end
+	local name = strsplit("-", sender)
+	if specs[name] == spec then return end
+	specs[name] = spec
+	InterruptTrack:DEBUG("SPEC detected", name, spec)
+	InterruptTrack:UpdateRoster()
+end
+
+function InterruptTrack:OnBliZziMessage(sender)
+	if sender == nil then return end
+	local name = strsplit("-", sender)
+	if hasBliZzi[name] then return end
+	hasBliZzi[name] = true
+	InterruptTrack:DEBUG("BLIZZI detected", name)
+	InterruptTrack:UpdateBars()
 end
 
 function InterruptTrack:OnAddonMessage(msg, sender)
@@ -874,6 +924,13 @@ function InterruptTrack:CheckSecrets()
 
 	InterruptTrack:MSG("plate count", count)
 	InterruptTrack:MSG("group", tostring(IsInGroup()), "| instance group", tostring(IsInInstanceGroup()), "| messages blocked", tostring(msgBlocked))
+	for i, unit in ipairs(UNITS) do
+		if Safe(UnitExists(unit), false) then
+			local name = Safe(UnitName(unit), unit)
+			local mine = unit == "player" or hasAddon[name] == true
+			InterruptTrack:MSG("member", name, "| InterruptTrack", tostring(mine), "| BliZzi", tostring(hasBliZzi[name] == true), "| spec", tostring(specs[name]))
+		end
+	end
 	for token, n in pairs(castStats) do
 		InterruptTrack:MSG("cast events", token, n)
 	end
@@ -1053,7 +1110,13 @@ eventFrame:SetScript(
 			InterruptTrack:UpdatePlates()
 		elseif event == "CHAT_MSG_ADDON" then
 			local prefix, msg, _, sender = ...
-			if prefix == PREFIX then InterruptTrack:OnAddonMessage(msg, sender) end
+			if prefix == PREFIX then
+				InterruptTrack:OnAddonMessage(msg, sender)
+			elseif prefix == BLIZZIPREFIX then
+				InterruptTrack:OnBliZziMessage(sender)
+			elseif prefix == SPECPREFIX then
+				InterruptTrack:OnSpecMessage(msg, sender)
+			end
 		else
 			InterruptTrack:UpdateRoster()
 		end
