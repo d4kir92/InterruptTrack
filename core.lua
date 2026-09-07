@@ -35,10 +35,10 @@ local INTERRUPTS = {
 }
 
 local SPECINTERRUPTS = {
-	[102] = {78675, 106839},
+	[102] = {78675},
 	[103] = {106839},
 	[104] = {106839},
-	[105] = {106839},
+	[105] = {},
 	[253] = {147362},
 	[254] = {147362},
 	[255] = {187707},
@@ -104,12 +104,18 @@ local castStats = {}
 local unknownCasts = {}
 local hasAddon = {}
 local hasBliZzi = {}
+local hasRotation = {}
 local specs = {}
 local lastHello = 0
 local msgBlocked = false
 local elapsed = 0
 local markElapsed = 0
 local lastKicker = nil
+local announcer = nil
+local syncedNext = nil
+local announcePending = false
+local lastChatAnnounce = {}
+local CHATANNOUNCECD = 3
 local debug = false
 local function GetDB()
 	InterruptTrackG = InterruptTrackG or {}
@@ -179,7 +185,10 @@ function InterruptTrack:UpdateRoster()
 	if IsInGroup() == false and IsInInstanceGroup() == false then
 		wipe(hasAddon)
 		wipe(hasBliZzi)
+		wipe(hasRotation)
 		wipe(specs)
+		wipe(lastChatAnnounce)
+		syncedNext = nil
 	end
 
 	wipe(entries)
@@ -227,6 +236,7 @@ function InterruptTrack:UpdateRoster()
 		end
 	end
 
+	InterruptTrack:RefreshAnnouncer()
 	InterruptTrack:ApplyLayout()
 	InterruptTrack:UpdateBars()
 	InterruptTrack:SendHello()
@@ -273,6 +283,11 @@ local function FindReadyEntry(guid)
 	return nil
 end
 
+local function SetLastKicker(guid)
+	lastKicker = guid
+	announcePending = true
+end
+
 local function StartUnknownCooldown(entry, castTime, kicked, hasKicked)
 	casted[entry.key] = {
 		["start"] = castTime,
@@ -282,7 +297,7 @@ local function StartUnknownCooldown(entry, castTime, kicked, hasKicked)
 		["hasKicked"] = hasKicked
 	}
 
-	lastKicker = entry.guid
+	SetLastKicker(entry.guid)
 end
 
 function InterruptTrack:OnUnknownCast(unit)
@@ -341,7 +356,7 @@ function InterruptTrack:OnCast(unit, spellID)
 		InterruptTrack:DEBUG("CAST matched pending interrupt", DebugValue(spellID))
 	end
 
-	lastKicker = guid
+	SetLastKicker(guid)
 	if owner == "player" then InterruptTrack:SendKick(spellID, casted[key].duration) end
 	InterruptTrack:DEBUG("CAST", DebugValue(unit), DebugValue(spellID), DebugValue(guid))
 	if isNew then
@@ -489,18 +504,79 @@ function InterruptTrack:ApplyLayout()
 	self.frame:SetSize(width, count * (height + spacing) - spacing)
 end
 
-local function GetNextInRotation()
+local function IsGroupLeader(unit)
+	if UnitIsGroupLeader then return Safe(UnitIsGroupLeader(unit), false) == true end
+	if UnitIsPartyLeader then return Safe(UnitIsPartyLeader(unit), false) == true end
+
+	return false
+end
+
+local function IsRotationUser(unit, name)
+	if unit == "player" then return InterruptTrack:GV(GetDB(), "KICKROTATION", true) == true end
+
+	return hasAddon[name] == true and hasRotation[name] == true
+end
+
+local function GetAnnouncer()
+	local bestGUID = nil
+	local bestRank = nil
+	for i, unit in ipairs(UNITS) do
+		if Safe(UnitExists(unit), false) and Safe(UnitIsPlayer(unit), false) then
+			local name = Safe(UnitName(unit))
+			local guid = Safe(UnitGUID(unit))
+			if name and guid and IsRotationUser(unit, name) then
+				local rank = 3
+				if Safe(InterruptTrack:GetRole(unit), "NONE") == "TANK" then
+					rank = 1
+				elseif IsGroupLeader(unit) then
+					rank = 2
+				end
+
+				if bestRank == nil or rank < bestRank or (rank == bestRank and guid < bestGUID) then
+					bestRank = rank
+					bestGUID = guid
+				end
+			end
+		end
+	end
+
+	return bestGUID
+end
+
+function InterruptTrack:RefreshAnnouncer()
+	local guid = GetAnnouncer()
+	if guid == announcer then return end
+	announcer = guid
+	syncedNext = nil
+end
+
+local function IsAnnouncer()
+	local me = Safe(UnitGUID("player"))
+
+	return me ~= nil and announcer == me
+end
+
+local function CollectRotation(skipHealer)
 	local order = {}
 	local ready = {}
 	for i, entry in ipairs(entries) do
-		if ready[entry.guid] == nil then
-			ready[entry.guid] = false
-			tinsert(order, entry.guid)
-		end
+		if skipHealer == false or entry.role ~= "HEALER" then
+			if ready[entry.guid] == nil then
+				ready[entry.guid] = false
+				tinsert(order, entry.guid)
+			end
 
-		if entry.remaining <= 0 then ready[entry.guid] = true end
+			if entry.remaining <= 0 then ready[entry.guid] = true end
+		end
 	end
 
+	return order, ready
+end
+
+local function GetNextInRotation()
+	local skipHealer = InterruptTrack:GV(GetDB(), "ROTATIONSKIPHEALER", true) == true
+	local order, ready = CollectRotation(skipHealer)
+	if skipHealer and #order == 0 then order, ready = CollectRotation(false) end
 	local count = #order
 	if count == 0 then return nil end
 	local start = 1
@@ -542,7 +618,18 @@ function InterruptTrack:UpdateBars()
 	local sorter = SORTERS[mode] or SORTERS["ROLE"]
 	table.sort(entries, sorter)
 	local nextKicker = nil
-	if rotation then nextKicker = GetNextInRotation() end
+	local wasPending = announcePending
+	announcePending = false
+	if rotation then
+		local mine = IsAnnouncer()
+		if mine == false and syncedNext ~= nil then
+			nextKicker = syncedNext
+		else
+			nextKicker = GetNextInRotation()
+		end
+
+		if mine and wasPending then InterruptTrack:AnnounceNext(nextKicker) end
+	end
 	for i, entry in ipairs(entries) do
 		local bar = bars[i]
 		if bar then
@@ -750,17 +837,17 @@ local function Transmit(msg, channel)
 	return false
 end
 
+local function GetChannel()
+	if IsInInstanceGroup() then return "INSTANCE_CHAT" end
+	if IsInRaid() then return "RAID" end
+	if IsInGroup() then return "PARTY" end
+
+	return nil
+end
+
 local function Send(msg)
 	if C_ChatInfo == nil or C_ChatInfo.SendAddonMessage == nil then return end
-	local channel = nil
-	if IsInInstanceGroup() then
-		channel = "INSTANCE_CHAT"
-	elseif IsInRaid() then
-		channel = "RAID"
-	elseif IsInGroup() then
-		channel = "PARTY"
-	end
-
+	local channel = GetChannel()
 	if channel == nil then return end
 	Transmit(msg, channel)
 end
@@ -777,11 +864,44 @@ function InterruptTrack:SendKick(spellID, duration)
 	Send(format("K:%d:%.1f", spellID, duration))
 end
 
-function InterruptTrack:SendHello()
+function InterruptTrack:SendHello(force)
 	local now = GetTime()
-	if now - lastHello < 5 then return end
+	if force ~= true and now - lastHello < 5 then return end
 	lastHello = now
-	Send("H")
+	local rotation = "0"
+	if InterruptTrack:GV(GetDB(), "KICKROTATION", true) == true then rotation = "1" end
+	Send("H:" .. rotation)
+end
+
+local function FindEntryByGUID(guid)
+	for i, entry in ipairs(entries) do
+		if entry.guid == guid then return entry end
+	end
+
+	return nil
+end
+
+function InterruptTrack:AnnounceChat(guid)
+	if InterruptTrack:GetWoWBuild() == "RETAIL" then return end
+	if SendChatMessage == nil then return end
+	if InterruptTrack:GV(GetDB(), "ANNOUNCEKICKCHAT", false) ~= true then return end
+	local entry = FindEntryByGUID(guid)
+	if entry == nil then return end
+	if entry.unit == "player" or hasAddon[entry.name] == true then return end
+	local now = GetTime()
+	if lastChatAnnounce[guid] ~= nil and now - lastChatAnnounce[guid] < CHATANNOUNCECD then return end
+	local channel = GetChannel()
+	if channel == nil then return end
+	lastChatAnnounce[guid] = now
+	local spell = Safe(InterruptTrack:GetSpellInfo(entry.spellID), "")
+	SendChatMessage(format(InterruptTrack:Trans("LID_CHATNEXTKICK"), entry.name, spell), channel)
+	InterruptTrack:DEBUG("CHAT ANNOUNCE", entry.name, spell)
+end
+
+function InterruptTrack:AnnounceNext(guid)
+	if guid == nil then return end
+	Send("N:" .. guid)
+	InterruptTrack:AnnounceChat(guid)
 end
 
 function InterruptTrack:HasAddon(name)
@@ -833,7 +953,29 @@ function InterruptTrack:OnAddonMessage(msg, sender)
 	if name == Safe(UnitName("player")) then return end
 	hasAddon[name] = true
 	local cmd, a, b = strsplit(":", msg)
-	if cmd == "H" then return end
+	if cmd == "H" then
+		local rotation = a == "1"
+		if hasRotation[name] ~= rotation then
+			hasRotation[name] = rotation
+			InterruptTrack:RefreshAnnouncer()
+			InterruptTrack:UpdateBars()
+		end
+
+		return
+	end
+
+	if cmd == "N" then
+		local unit = GetUnitByName(name)
+		if unit == nil then return end
+		local guid = Safe(UnitGUID(unit))
+		if guid == nil or guid ~= announcer then return end
+		syncedNext = a
+		InterruptTrack:DEBUG("NEXT from", name, tostring(a))
+		InterruptTrack:UpdateBars()
+
+		return
+	end
+
 	if cmd == "K" then
 		local spellID = tonumber(a)
 		local duration = tonumber(b)
@@ -845,7 +987,7 @@ function InterruptTrack:OnAddonMessage(msg, sender)
 		local key = GetKey(guid, spellID)
 		local isNew = casted[key] == nil
 		casted[key] = {["start"] = GetTime(), ["duration"] = duration}
-		lastKicker = guid
+		SetLastKicker(guid)
 		InterruptTrack:DEBUG("KICK from", name, spellID, duration)
 		if isNew then
 			InterruptTrack:UpdateRoster()
