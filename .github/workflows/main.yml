@@ -38,6 +38,21 @@ jobs:
       #- name: Package and release (ONE-ZIP)
       #  uses: BigWigsMods/packager@master
 
+      - name: Package and release for Retail
+        uses: BigWigsMods/packager@master
+        with:
+          args: -g retail -w 0
+
+      - name: Package and release for Mists Classic
+        uses: BigWigsMods/packager@master
+        with:
+          args: -g mists -w 0
+
+      - name: Package and release for Cata Classic
+        uses: BigWigsMods/packager@master
+        with:
+          args: -g cata -w 0
+
       - name: Package and release for Wrath Classic
         uses: BigWigsMods/packager@master
         with:

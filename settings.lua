@@ -14,13 +14,11 @@ local function OnSlash(msg)
 	if msg then cmd = strlower(strtrim(msg)) end
 	if cmd == "debug" then
 		InterruptTrack:ToggleDebug()
-
 		return
 	end
 
 	if cmd == "check" then
 		InterruptTrack:CheckSecrets()
-
 		return
 	end
 
@@ -31,7 +29,6 @@ local function GetCollapsed(key)
 	if key == nil then return nil end
 	if type(InterruptTrackG) ~= "table" then return nil end
 	if type(InterruptTrackG["COLLAPSED"]) ~= "table" then return nil end
-
 	return InterruptTrackG["COLLAPSED"][key]
 end
 
@@ -49,7 +46,6 @@ end
 local function GetConfig(key, default)
 	local value = InterruptTrack:GV(InterruptTrackG, key, default)
 	InterruptTrack:SV(InterruptTrackG, key, value)
-
 	return value
 end
 
@@ -167,7 +163,7 @@ eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:SetScript("OnEvent", function(self, event, ...)
 	if event == "PLAYER_LOGIN" then
 		InterruptTrackG = InterruptTrackG or {}
-		InterruptTrack:SetVersion(132219, "0.1.0")
+		InterruptTrack:SetVersion(132219, "0.1.1")
 		InterruptTrack:InitSettings()
 		InterruptTrack:CreateMainFrame()
 		InterruptTrack:ApplyKeybind()
@@ -176,6 +172,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 			C_ChatInfo.RegisterAddonMessagePrefix("BliZziIT")
 			C_ChatInfo.RegisterAddonMessagePrefix("LibSpec")
 		end
+
 		InterruptTrack:AddSlash("interrupttrack", OnSlash)
 		InterruptTrack:CreateMinimapButton({
 			["name"] = "InterruptTrack",
