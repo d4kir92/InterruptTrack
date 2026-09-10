@@ -1,4 +1,5 @@
 local _, InterruptTrack = ...
+InterruptTrack.NAMEPLATEFEATURE = false
 local UNITS = {"player", "party1", "party2", "party3", "party4"}
 local UNITMAP = {}
 for i, unit in ipairs(UNITS) do
@@ -774,6 +775,7 @@ end
 
 local activeMarkers = {}
 function InterruptTrack:UpdatePlates()
+	if InterruptTrack.NAMEPLATEFEATURE ~= true then return end
 	if C_NamePlate == nil then return end
 	wipe(activeMarkers)
 	for name, active in pairs(markers) do
@@ -909,6 +911,7 @@ function InterruptTrack:HasAddon(name)
 end
 
 function InterruptTrack:SetMark(active)
+	if InterruptTrack.NAMEPLATEFEATURE ~= true then return end
 	local me = Safe(UnitName("player"))
 	if me == nil then return end
 	if active then
@@ -1016,6 +1019,7 @@ markButton:SetAlpha(0)
 markButton:RegisterForClicks("AnyDown")
 markButton:SetScript("OnClick", function() InterruptTrack:MarkTarget() end)
 function InterruptTrack:ApplyKeybind()
+	if InterruptTrack.NAMEPLATEFEATURE ~= true then return end
 	if InCombatLockdown() then return end
 	ClearOverrideBindings(markButton)
 	local key = InterruptTrack:GV(GetDB(), "MARKKEY", nil)
@@ -1024,6 +1028,7 @@ function InterruptTrack:ApplyKeybind()
 end
 
 function InterruptTrack:MarkTarget()
+	if InterruptTrack.NAMEPLATEFEATURE ~= true then return end
 	if InterruptTrack:IsMarking() then
 		InterruptTrack:SetMark(false)
 		InterruptTrack:MSG(InterruptTrack:Trans("LID_MARKTARGETCLEARED"))

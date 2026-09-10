@@ -7,20 +7,29 @@
 
 ## Version: 0.1.0
 ## Title: InterruptTrack |T:16:16:0:0|t by |cff55d2ffD4KiR |T132115:16:16:0:0|t
-## Notes: 
-## Notes-deDE: 
-## Notes-esES: 
-## Notes-esMX: 
-## Notes-frFR: 
-## Notes-itIT: 
-## Notes-koKR: 
-## Notes-ptBR: 
-## Notes-ruRU: 
-## Notes-zhCN: 
-## Notes-zhTW: 
+## Notes: Tracks the interrupt cooldowns of your whole party in real time and shows whose turn it is in the kick rotation.
+## Notes-deDE: Verfolgt die Unterbrecher-Cooldowns deiner gesamten Gruppe in Echtzeit und zeigt an, wer als Nächstes mit dem Kick dran ist.
+## Notes-esES: Rastrea en tiempo real los tiempos de reutilización de interrupción de todo tu grupo y muestra a quién le toca interrumpir.
+## Notes-esMX: Rastrea en tiempo real los tiempos de reutilización de interrupción de todo tu grupo y muestra a quién le toca interrumpir.
+## Notes-frFR: Suit en temps réel les temps de recharge des interruptions de tout votre groupe et indique à qui c'est le tour d'interrompre.
+## Notes-itIT: Tiene traccia in tempo reale delle ricariche delle interruzioni di tutto il gruppo e mostra a chi tocca interrompere.
+## Notes-koKR: 파티 전체의 방해 효과 재사용 대기시간을 실시간으로 추적하고 다음 차단 순서가 누구인지 알려줍니다.
+## Notes-ptBR: Rastreia em tempo real os tempos de recarga de interrupção de todo o seu grupo e mostra de quem é a vez de interromper.
+## Notes-ruRU: Отслеживает перезарядку прерываний всей вашей группы в реальном времени и показывает, чья очередь прерывать.
+## Notes-zhCN: 实时追踪整个小队的打断技能冷却，并显示打断顺序中下一个该出手的人。
+## Notes-zhTW: 即時追蹤整個隊伍的打斷技能冷卻，並顯示打斷順序中下一個該出手的人。
 ## Author: D4KiR |T132115:16:16:0:0|t
-## Category: D4KiR |T132115:16:16:0:0|t
-## X-Category: D4KiR |T132115:16:16:0:0|t
+## Category: Combat
+## Category-deDE: Kampf
+## Category-esES: Combate
+## Category-esMX: Combate
+## Category-frFR: Combat
+## Category-itIT: Combattimento
+## Category-koKR: 전투
+## Category-ptBR: Combate
+## Category-ruRU: Бой
+## Category-zhCN: 战斗
+## Category-zhTW: 戰鬥
 ## DefaultState: enabled
 ## SavedVariables: InterruptTrackG
 ## SavedVariablesPerCharacter: InterruptTrackC

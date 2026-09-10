@@ -143,7 +143,7 @@ function InterruptTrack:InitSettings()
 		end
 	end)
 
-	AddKeybind("MARKKEY", nil, function() InterruptTrack:ApplyKeybind() end)
+	if InterruptTrack.NAMEPLATEFEATURE == true then AddKeybind("MARKKEY", nil, function() InterruptTrack:ApplyKeybind() end) end
 	AddCategory("DISPLAY")
 	AddDropdown("SORTBY", "ROLE", InterruptTrack:GetSortModes(), function() InterruptTrack:UpdateBars() end)
 	AddCheckbox("KICKROTATION", true, function()
