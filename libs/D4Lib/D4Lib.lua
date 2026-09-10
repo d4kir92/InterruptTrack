@@ -35,7 +35,6 @@ end
 function D4:IsSecret(value)
     local isSecret = _G["issecretvalue"]
     if isSecret == nil then return false end
-
     return isSecret(value) == true
 end
 
