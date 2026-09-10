@@ -1,6 +1,6 @@
 ## Interface: 20506
 ## Version: 0.1.0
-## Title: InterruptTrack |T:16:16:0:0|t by |cff55d2ffD4KiR |T132115:16:16:0:0|t
+## Title: InterruptTrack |T132219:16:16:0:0|t by |cff55d2ffD4KiR |T132115:16:16:0:0|t
 ## Notes: Tracks the interrupt cooldowns of your whole party in real time and shows whose turn it is in the kick rotation.
 ## Notes-deDE: Verfolgt die Unterbrecher-Cooldowns deiner gesamten Gruppe in Echtzeit und zeigt an, wer als Nächstes mit dem Kick dran ist.
 ## Notes-esES: Rastrea en tiempo real los tiempos de reutilización de interrupción de todo tu grupo y muestra a quién le toca interrumpir.
