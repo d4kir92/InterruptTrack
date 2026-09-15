@@ -131,7 +131,7 @@ local function GetDB()
 end
 
 local function IsSecret(value)
-	return issecretvalue ~= nil and issecretvalue(value) == true
+	return InterruptTrack:IsSecret(value)
 end
 
 local function Safe(value, fallback)
