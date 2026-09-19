@@ -163,7 +163,7 @@ eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:SetScript("OnEvent", function(self, event, ...)
 	if event == "PLAYER_LOGIN" then
 		InterruptTrackG = InterruptTrackG or {}
-		InterruptTrack:SetVersion(132219, "0.1.2")
+		InterruptTrack:SetVersion(132219, "0.1.3")
 		InterruptTrack:InitSettings()
 		InterruptTrack:CreateMainFrame()
 		InterruptTrack:ApplyKeybind()
