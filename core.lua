@@ -34,6 +34,13 @@ local INTERRUPTS = {
 	["WARLOCK"] = {{19647, 24}},
 	["WARRIOR"] = {{6552, 15}}
 }
+local SPELLRANKS = {}
+
+if InterruptTrack:IsForever() then
+	INTERRUPTS["WARRIOR"] = {{72, 12, false, 12}, {6552, 10, false, 38}}
+	SPELLRANKS[72] = {72, 1671, 1672}
+	SPELLRANKS[6552] = {6552, 6554}
+end
 
 local SPECINTERRUPTS = {
 	[102] = {78675},
@@ -113,6 +120,7 @@ local unknownCasts = {}
 local hasAddon = {}
 local hasBliZzi = {}
 local hasRotation = {}
+local knownInterrupts = {}
 local specs = {}
 local lastHello = 0
 local msgBlocked = false
@@ -145,16 +153,38 @@ local function IsInInstanceGroup()
 end
 
 local function IsKnown(spellID)
-	if C_SpellBook and C_SpellBook.IsSpellKnown then return C_SpellBook.IsSpellKnown(spellID) end
-	if IsPlayerSpell then return IsPlayerSpell(spellID) end
+	if C_SpellBook and C_SpellBook.IsSpellKnown and Safe(C_SpellBook.IsSpellKnown(spellID), false) == true then return true end
+	if IsPlayerSpell and Safe(IsPlayerSpell(spellID), false) == true then return true end
 	return false
 end
 
-local function HasKnownSpell(list)
-	for i, tab in ipairs(list) do
-		if Safe(IsKnown(tab[1]), false) == true then return true end
+local function IsKnownPetSpell(spellID)
+	if C_SpellBook and C_SpellBook.IsSpellKnown and Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Pet then
+		local ok, known = pcall(C_SpellBook.IsSpellKnown, spellID, Enum.SpellBookSpellBank.Pet)
+		if ok and Safe(known, false) == true then return true end
+	end
+	if IsSpellKnown then
+		local ok, known = pcall(IsSpellKnown, spellID, true)
+		if ok and Safe(known, false) == true then return true end
 	end
 	return false
+end
+
+local function IsKnownInterrupt(class, spellID)
+	local ranks = SPELLRANKS[spellID]
+	if ranks then
+		for i, rankID in ipairs(ranks) do
+			if IsKnown(rankID) then return true end
+		end
+	elseif IsKnown(spellID) then
+		return true
+	end
+	if class == "WARLOCK" then return IsKnownPetSpell(spellID) end
+	return false
+end
+
+local function AllowsSpell(allow, spellID)
+	return allow[spellID] == true or tContains(allow, spellID)
 end
 
 local function GetKey(guid, spellID)
@@ -197,6 +227,7 @@ function InterruptTrack:UpdateRoster()
 		wipe(hasAddon)
 		wipe(hasBliZzi)
 		wipe(hasRotation)
+		wipe(knownInterrupts)
 		wipe(specs)
 		wipe(lastChatAnnounce)
 		syncedNext = nil
@@ -212,16 +243,18 @@ function InterruptTrack:UpdateRoster()
 			if list and guid then
 				local name = Safe(UnitName(unit), unit)
 				local role = Safe(InterruptTrack:GetRole(unit), "NONE")
-				local filter = unit == "player" and HasKnownSpell(list)
+				local filter = unit == "player"
 				local allow = nil
-				if filter == false then allow = SPECINTERRUPTS[specs[name]] end
+				if filter == false then allow = knownInterrupts[name] or SPECINTERRUPTS[specs[name]] end
 				for x, tab in ipairs(list) do
 					local key = GetKey(guid, tab[1])
 					local show = true
 					if filter then
-						show = Safe(IsKnown(tab[1]), false) == true
+						show = IsKnownInterrupt(class, tab[1])
 					elseif allow then
-						show = tContains(allow, tab[1])
+						show = AllowsSpell(allow, tab[1])
+					elseif tab[4] and Safe(UnitLevel(unit), 0) < tab[4] then
+						show = false
 					elseif tab[3] == true then
 						show = casted[key] ~= nil
 					end
@@ -263,7 +296,18 @@ end
 
 local function ResolveSpellID(spellID)
 	if spellID == nil then return nil, true end
-	if IsSecret(spellID) == false then return spellID, true end
+	if IsSecret(spellID) == false then
+		if SPELLCDS[spellID] then return spellID, true end
+		if C_Spell and C_Spell.GetBaseSpell then
+			local ok, baseID = pcall(C_Spell.GetBaseSpell, spellID)
+			if ok and baseID and IsSecret(baseID) == false and SPELLCDS[baseID] then return baseID, true end
+		end
+		if C_Spell and C_Spell.GetSpellName then
+			local ok, name = pcall(C_Spell.GetSpellName, spellID)
+			if ok and name and IsSecret(name) == false then return GetNameIndex()[name] or spellID, true end
+		end
+		return spellID, true
+	end
 	local readable = false
 	if C_Spell and C_Spell.GetSpellName then
 		local ok, name = pcall(C_Spell.GetSpellName, spellID)
@@ -844,6 +888,28 @@ local function Send(msg)
 	Transmit(msg, channel)
 end
 
+local function GetKnownInterruptMessage()
+	local _, class = UnitClass("player")
+	class = Safe(class)
+	local list = INTERRUPTS[class]
+	if list == nil then return "" end
+	local known = {}
+	for i, tab in ipairs(list) do
+		if IsKnownInterrupt(class, tab[1]) then tinsert(known, tab[1]) end
+	end
+	return table.concat(known, ",")
+end
+
+local function ParseKnownInterrupts(value)
+	if value == nil then return nil end
+	local known = {}
+	for spellID in string.gmatch(value, "%d+") do
+		spellID = tonumber(spellID)
+		if spellID > 0 then known[spellID] = true end
+	end
+	return known
+end
+
 function InterruptTrack:SendMark(active)
 	if active then
 		Send("M")
@@ -862,7 +928,9 @@ function InterruptTrack:SendHello(force)
 	lastHello = now
 	local rotation = "0"
 	if InterruptTrack:GV(GetDB(), "KICKROTATION", true) == true then rotation = "1" end
-	Send("H:" .. rotation)
+	local known = GetKnownInterruptMessage()
+	if known == "" then known = "0" end
+	Send("H:" .. rotation .. ":" .. known)
 end
 
 local function FindEntryByGUID(guid)
@@ -946,10 +1014,13 @@ function InterruptTrack:OnAddonMessage(msg, sender)
 	local cmd, a, b = strsplit(":", msg)
 	if cmd == "H" then
 		local rotation = a == "1"
-		if hasRotation[name] ~= rotation then
+		local available = ParseKnownInterrupts(b)
+		local availabilityChanged = available ~= nil
+		if available then knownInterrupts[name] = available end
+		if hasRotation[name] ~= rotation or availabilityChanged then
 			hasRotation[name] = rotation
 			InterruptTrack:RefreshAnnouncer()
-			InterruptTrack:UpdateBars()
+			InterruptTrack:UpdateRoster()
 		end
 		return
 	end
@@ -1216,6 +1287,7 @@ InterruptTrack:RegisterEvent(eventFrame, "PLAYER_ENTERING_WORLD")
 InterruptTrack:RegisterEvent(eventFrame, "GROUP_ROSTER_UPDATE")
 InterruptTrack:RegisterEvent(eventFrame, "PLAYER_ROLES_ASSIGNED")
 InterruptTrack:RegisterEvent(eventFrame, "PLAYER_SPECIALIZATION_CHANGED")
+InterruptTrack:RegisterEvent(eventFrame, "SPELLS_CHANGED")
 InterruptTrack:RegisterEvent(eventFrame, "UNIT_SPELLCAST_INTERRUPTED")
 InterruptTrack:RegisterEvent(eventFrame, "UNIT_SPELLCAST_CHANNEL_STOP")
 InterruptTrack:RegisterEvent(eventFrame, "NAME_PLATE_UNIT_ADDED")
