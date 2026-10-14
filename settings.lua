@@ -1,6 +1,6 @@
 -- By D4KiR
 local _, InterruptTrack = ...
-InterruptTrack:SetAddonOutput("InterruptTrack", 132219)
+InterruptTrack:SetAddonOutput()
 local itset = nil
 local DEFAULT_WIDTH = 420
 local DEFAULT_HEIGHT = 520
@@ -125,7 +125,7 @@ function InterruptTrack:InitSettings()
 		end,
 		["getCollapsed"] = function(key) return GetCollapsed(key) end,
 		["setCollapsed"] = function(key, collapsed) SetCollapsed(key, collapsed) end,
-		["title"] = format("|T132219:16:16:0:0|t InterruptTrack v%s", InterruptTrack:GetVersion())
+		["title"] = format("|T%s:16:16:0:0|t InterruptTrack v%s", InterruptTrack:GetAddonIcon(), InterruptTrack:GetVersion())
 	})
 
 	itset:SuspendLayout()
@@ -163,7 +163,7 @@ eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:SetScript("OnEvent", function(self, event, ...)
 	if event == "PLAYER_LOGIN" then
 		InterruptTrackG = InterruptTrackG or {}
-		InterruptTrack:SetVersion(132219, "0.1.8")
+		InterruptTrack:SetVersion()
 		InterruptTrack:InitSettings()
 		InterruptTrack:CreateMainFrame()
 		InterruptTrack:ApplyKeybind()
@@ -176,10 +176,10 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 		InterruptTrack:AddSlash("interrupttrack", OnSlash)
 		InterruptTrack:CreateMinimapButton({
 			["name"] = "InterruptTrack",
-			["icon"] = 132219,
+			["icon"] = InterruptTrack:GetAddonIcon(),
 			["var"] = nil,
 			["dbtab"] = InterruptTrackG,
-			["vTT"] = {{"|T132219:16:16:0:0|t InterruptTrack", "v" .. InterruptTrack:GetVersion()}, {InterruptTrack:Trans("LID_LEFTCLICK"), InterruptTrack:Trans("LID_OPENSETTINGS")}, {InterruptTrack:Trans("LID_SHIFTRIGHTCLICK"), InterruptTrack:Trans("LID_HIDEMINIMAPBUTTON")}},
+			["vTT"] = {{format("|T%s:16:16:0:0|t InterruptTrack", InterruptTrack:GetAddonIcon()),"v" .. InterruptTrack:GetVersion()}, {InterruptTrack:Trans("LID_LEFTCLICK"), InterruptTrack:Trans("LID_OPENSETTINGS")}, {InterruptTrack:Trans("LID_SHIFTRIGHTCLICK"), InterruptTrack:Trans("LID_HIDEMINIMAPBUTTON")}},
 			["funcL"] = function() InterruptTrack:ToggleSettings() end,
 			["funcSR"] = function()
 				InterruptTrack:SV(InterruptTrackG, "MMBTN", false)
