@@ -10,6 +10,7 @@ InterruptTrack:AddTrans("ruRU", "LID_SORTBYCOOLDOWNDESC", "Восстановл�
 InterruptTrack:AddTrans("ruRU", "LID_SORTBYCOOLDOWNASC", "Восстановление по возрастанию")
 InterruptTrack:AddTrans("ruRU", "LID_KICKROTATION", "Очередь прерываний (сначала танк, затем ДД)")
 InterruptTrack:AddTrans("ruRU", "LID_ROTATIONSKIPHEALER", "Игнорировать лекарей в очереди прерываний")
+InterruptTrack:AddTrans("ruRU", "LID_NAMEPLATEKICKS", "Отслеживание прерываний на индикаторах здоровья")
 InterruptTrack:AddTrans("ruRU", "LID_ANNOUNCEKICKCHAT", "Объявлять следующее прерывание в чат (игроки без аддона)")
 InterruptTrack:AddTrans("ruRU", "LID_CHATNEXTKICK", "Следующее прерывание: %s (%s)")
 InterruptTrack:AddTrans("ruRU", "LID_SHOWRAIDMARK", "Показывать метку цели")

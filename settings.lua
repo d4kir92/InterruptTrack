@@ -149,6 +149,7 @@ function InterruptTrack:InitSettings()
 	end)
 
 	AddCheckbox("ROTATIONSKIPHEALER", true, function() InterruptTrack:UpdateBars() end)
+	AddCheckbox("NAMEPLATEKICKS", true, function() InterruptTrack:UpdatePlateKicks() end)
 	if InterruptTrack:GetWoWBuild() ~= "RETAIL" then AddCheckbox("ANNOUNCEKICKCHAT", false) end
 	AddCheckbox("SHOWRAIDMARK", true, function() InterruptTrack:UpdateMarks() end)
 	AddCategory("BAR", 2)

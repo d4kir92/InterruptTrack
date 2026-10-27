@@ -10,6 +10,7 @@ InterruptTrack:AddTrans("deDE", "LID_SORTBYCOOLDOWNDESC", "Abklingzeit absteigen
 InterruptTrack:AddTrans("deDE", "LID_SORTBYCOOLDOWNASC", "Abklingzeit aufsteigend")
 InterruptTrack:AddTrans("deDE", "LID_KICKROTATION", "Kick-Rotation (erst Tank, dann DD)")
 InterruptTrack:AddTrans("deDE", "LID_ROTATIONSKIPHEALER", "Heiler in der Kick-Rotation ignorieren")
+InterruptTrack:AddTrans("deDE", "LID_NAMEPLATEKICKS", "Kick-Tracker an Namensplaketten")
 InterruptTrack:AddTrans("deDE", "LID_ANNOUNCEKICKCHAT", "Nächsten Kick im Chat ansagen (Spieler ohne Addon)")
 InterruptTrack:AddTrans("deDE", "LID_CHATNEXTKICK", "Nächster Kick: %s (%s)")
 InterruptTrack:AddTrans("deDE", "LID_SHOWRAIDMARK", "Zielmarkierung anzeigen")

@@ -10,6 +10,7 @@ InterruptTrack:AddTrans("koKR", "LID_SORTBYCOOLDOWNDESC", "재사용 대기시�
 InterruptTrack:AddTrans("koKR", "LID_SORTBYCOOLDOWNASC", "재사용 대기시간 오름차순")
 InterruptTrack:AddTrans("koKR", "LID_KICKROTATION", "차단 순서 (방어 전담 먼저, 그다음 공격 전담)")
 InterruptTrack:AddTrans("koKR", "LID_ROTATIONSKIPHEALER", "차단 순서에서 치유 전담 제외")
+InterruptTrack:AddTrans("koKR", "LID_NAMEPLATEKICKS", "이름표에 차단 추적기 표시")
 InterruptTrack:AddTrans("koKR", "LID_ANNOUNCEKICKCHAT", "다음 차단을 대화로 알리기 (애드온이 없는 플레이어)")
 InterruptTrack:AddTrans("koKR", "LID_CHATNEXTKICK", "다음 차단: %s (%s)")
 InterruptTrack:AddTrans("koKR", "LID_SHOWRAIDMARK", "대상의 공격대 표식 표시")

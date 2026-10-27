@@ -10,6 +10,7 @@ InterruptTrack:AddTrans("frFR", "LID_SORTBYCOOLDOWNDESC", "Temps de recharge dé
 InterruptTrack:AddTrans("frFR", "LID_SORTBYCOOLDOWNASC", "Temps de recharge croissant")
 InterruptTrack:AddTrans("frFR", "LID_KICKROTATION", "Rotation des interruptions (tank d'abord, puis DPS)")
 InterruptTrack:AddTrans("frFR", "LID_ROTATIONSKIPHEALER", "Ignorer les soigneurs dans la rotation des interruptions")
+InterruptTrack:AddTrans("frFR", "LID_NAMEPLATEKICKS", "Suivi des interruptions sur les barres d'info")
 InterruptTrack:AddTrans("frFR", "LID_ANNOUNCEKICKCHAT", "Annoncer la prochaine interruption dans le chat (joueurs sans l'addon)")
 InterruptTrack:AddTrans("frFR", "LID_CHATNEXTKICK", "Prochaine interruption : %s (%s)")
 InterruptTrack:AddTrans("frFR", "LID_SHOWRAIDMARK", "Afficher le symbole de raid de la cible")

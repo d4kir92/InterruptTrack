@@ -10,6 +10,7 @@ InterruptTrack:AddTrans("esMX", "LID_SORTBYCOOLDOWNDESC", "Reutilización descen
 InterruptTrack:AddTrans("esMX", "LID_SORTBYCOOLDOWNASC", "Reutilización ascendente")
 InterruptTrack:AddTrans("esMX", "LID_KICKROTATION", "Rotación de interrupciones (primero el tanque, luego DPS)")
 InterruptTrack:AddTrans("esMX", "LID_ROTATIONSKIPHEALER", "Ignorar a los sanadores en la rotación de interrupciones")
+InterruptTrack:AddTrans("esMX", "LID_NAMEPLATEKICKS", "Rastreador de interrupciones en placas de nombre")
 InterruptTrack:AddTrans("esMX", "LID_ANNOUNCEKICKCHAT", "Anunciar la siguiente interrupción en el chat (jugadores sin el addon)")
 InterruptTrack:AddTrans("esMX", "LID_CHATNEXTKICK", "Siguiente interrupción: %s (%s)")
 InterruptTrack:AddTrans("esMX", "LID_SHOWRAIDMARK", "Mostrar marca de banda del objetivo")

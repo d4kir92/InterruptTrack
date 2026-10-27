@@ -195,6 +195,92 @@ local function GetWindow(spellID)
 	return TRAVELTIME[spellID] or SUCCESSWINDOW
 end
 
+local PK = {
+	["size"] = 24,
+	["spacing"] = 2,
+	["offset"] = 4,
+	["seq"] = 0,
+	["icons"] = {},
+	["boxes"] = {},
+	["list"] = {},
+	["next"] = nil
+}
+
+local function GetPlateUnit(unit)
+	if unit == nil or IsSecret(unit) then return nil end
+	if strmatch(unit, "^nameplate%d+$") then return unit end
+	if C_NamePlate == nil then return nil end
+	for i, plate in pairs(C_NamePlate.GetNamePlates()) do
+		local token = plate.namePlateUnitToken
+		if token == nil and plate.UnitFrame then token = plate.UnitFrame.unit end
+		if token and IsSecret(token) == false and Safe(UnitIsUnit(token, unit), false) == true then return token end
+	end
+	return nil
+end
+
+local function AddPlateKick(token, key)
+	if token == nil or key == nil then return end
+	local ok, hostile = pcall(UnitCanAttack, "player", token)
+	if ok and Safe(hostile, true) == false then return end
+	local guid = strmatch(key, "^(.+)%-%d+$")
+	if guid == nil then return end
+	local icon = PK.icons[guid]
+	if icon == nil then
+		icon = {}
+		PK.icons[guid] = icon
+	end
+
+	icon.key = key
+	if icon.token ~= token then
+		PK.seq = PK.seq + 1
+		icon.seq = PK.seq
+		icon.token = token
+	end
+
+	icon.waitGUID = nil
+	icon.waitTarget = nil
+end
+
+function InterruptTrack:OnPlateRemoved(token)
+	if token == nil or IsSecret(token) then return end
+	local plateGUID = Safe(UnitGUID(token))
+	local onTarget = Safe(UnitIsUnit(token, "target"), false) == true
+	for guid, icon in pairs(PK.icons) do
+		if icon.token == token then
+			icon.token = nil
+			icon.waitGUID = plateGUID
+			icon.waitTarget = onTarget
+		end
+	end
+end
+
+function InterruptTrack:OnPlateAdded(token)
+	if token == nil or IsSecret(token) then return end
+	local plateGUID = Safe(UnitGUID(token))
+	local onTarget = nil
+	for guid, icon in pairs(PK.icons) do
+		if icon.token == nil then
+			local match = plateGUID ~= nil and icon.waitGUID == plateGUID
+			if match == false and icon.waitTarget then
+				if onTarget == nil then onTarget = Safe(UnitIsUnit(token, "target"), false) == true end
+				match = onTarget
+			end
+
+			if match then
+				icon.token = token
+				icon.waitGUID = nil
+				icon.waitTarget = nil
+			end
+		end
+	end
+end
+
+function InterruptTrack:OnTargetChanged()
+	for guid, icon in pairs(PK.icons) do
+		icon.waitTarget = nil
+	end
+end
+
 local function DebugValue(value)
 	if IsSecret(value) then return "<secret>" end
 	return tostring(value)
@@ -337,7 +423,7 @@ local function SetLastKicker(guid)
 	announcePending = true
 end
 
-local function StartUnknownCooldown(entry, castTime, kicked, hasKicked)
+local function StartUnknownCooldown(entry, castTime, kicked, hasKicked, plate)
 	casted[entry.key] = {
 		["start"] = castTime,
 		["duration"] = learned[entry.key] or SPELLCDS[entry.spellID],
@@ -346,6 +432,7 @@ local function StartUnknownCooldown(entry, castTime, kicked, hasKicked)
 		["hasKicked"] = hasKicked
 	}
 
+	AddPlateKick(plate, entry.key)
 	SetLastKicker(entry.guid)
 end
 
@@ -362,7 +449,7 @@ function InterruptTrack:OnUnknownCast(unit)
 	if pending.time ~= nil and now - pending.time <= SUCCESSWINDOW then
 		unknownCasts[guid] = nil
 		pending.time = nil
-		StartUnknownCooldown(entry, now, pending.kicked, pending.hasKicked)
+		StartUnknownCooldown(entry, now, pending.kicked, pending.hasKicked, pending.plate)
 		InterruptTrack:DEBUG("UNIDENTIFIED CAST matched pending interrupt", entry.name)
 		InterruptTrack:UpdateBars()
 		return
@@ -403,6 +490,7 @@ function InterruptTrack:OnCast(unit, spellID)
 		casted[key].success = true
 		casted[key].kicked = pending.kicked
 		casted[key].hasKicked = pending.hasKicked
+		AddPlateKick(pending.plate, key)
 		pending.time = nil
 		InterruptTrack:DEBUG("CAST matched pending interrupt", DebugValue(spellID))
 	end
@@ -421,6 +509,7 @@ function InterruptTrack:OnInterrupted(unit, spellID)
 	if IsSecret(unit) == false and (UNITMAP[unit] ~= nil or PETOWNER[unit] ~= nil) then return end
 	local now = GetTime()
 	local hasKicked = IsSecret(spellID) or spellID ~= nil
+	local plate = GetPlateUnit(unit)
 	local matched = false
 	local duplicate = false
 	for i, entry in ipairs(entries) do
@@ -434,6 +523,8 @@ function InterruptTrack:OnInterrupted(unit, spellID)
 				cd.hasKicked = hasKicked
 				matched = true
 			end
+
+			AddPlateKick(plate, entry.key)
 		end
 	end
 
@@ -461,7 +552,7 @@ function InterruptTrack:OnInterrupted(unit, spellID)
 		local target = FindReadyEntry(guid)
 		if target then
 			unknownCasts[guid] = nil
-			StartUnknownCooldown(target, newest, spellID, hasKicked)
+			StartUnknownCooldown(target, newest, spellID, hasKicked, plate)
 			InterruptTrack:DEBUG("INTERRUPTED attributed to unidentified cast", target.name)
 			InterruptTrack:UpdateBars()
 			return
@@ -471,6 +562,7 @@ function InterruptTrack:OnInterrupted(unit, spellID)
 	pending.time = now
 	pending.kicked = spellID
 	pending.hasKicked = hasKicked
+	pending.plate = plate
 	InterruptTrack:DEBUG("INTERRUPTED stored as pending")
 end
 
@@ -672,6 +764,8 @@ function InterruptTrack:UpdateBars()
 		if mine and wasPending then InterruptTrack:AnnounceNext(nextKicker) end
 	end
 
+	PK.next = nextKicker
+
 	for i, entry in ipairs(entries) do
 		local bar = bars[i]
 		if bar then
@@ -865,6 +959,143 @@ function InterruptTrack:UpdatePlates()
 	end
 end
 
+local function GetKickBox(guid)
+	local box = PK.boxes[guid]
+	if box then return box end
+	box = CreateFrame("Frame", nil, UIParent)
+	box:SetSize(PK.size, PK.size)
+	box.border = box:CreateTexture(nil, "BACKGROUND")
+	box.border:SetAllPoints(box)
+	box.border:SetColorTexture(0, 0, 0, 1)
+	box.icon = box:CreateTexture(nil, "ARTWORK")
+	box.icon:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
+	box.icon:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1)
+	box.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	box.cd = CreateFrame("Cooldown", nil, box, "CooldownFrameTemplate")
+	box.cd:SetAllPoints(box.icon)
+	if box.cd.SetHideCountdownNumbers then box.cd:SetHideCountdownNumbers(true) end
+	if box.cd.SetDrawEdge then box.cd:SetDrawEdge(false) end
+	box.overlay = CreateFrame("Frame", nil, box)
+	box.overlay:SetAllPoints(box)
+	box.time = box.overlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	box.time:SetPoint("CENTER", box, "CENTER", 0, 0)
+	box.time:SetTextColor(1, 1, 1)
+	InterruptTrack:SetFontSize(box.time, 11, "OUTLINE")
+	box:Hide()
+	PK.boxes[guid] = box
+	return box
+end
+
+local function SortKickIcons(a, b)
+	if a.ready ~= b.ready then return a.ready end
+	if a.ready then
+		local na = a.guid == PK.next
+		local nb = b.guid == PK.next
+		if na ~= nb then return na end
+	end
+	return a.seq < b.seq
+end
+
+local function GetPlateAnchor(plate)
+	local frame = plate.UnitFrame
+	if frame and frame.healthBar and frame.healthBar:IsVisible() then return frame.healthBar end
+	return plate
+end
+
+local function PaintKickBox(box, icon)
+	local entry = icon.entry
+	if box.spellID ~= entry.spellID then
+		box.spellID = entry.spellID
+		local _, _, tex = InterruptTrack:GetSpellInfo(entry.spellID)
+		box.icon:SetTexture(tex)
+	end
+
+	if box.class ~= entry.class then
+		box.class = entry.class
+		local r, g, b = InterruptTrack:GetClassColor(entry.class)
+		box.border:SetColorTexture(r or 0, g or 0, b or 0, 1)
+	end
+
+	local cd = casted[entry.key]
+	if icon.ready == false and cd then
+		if box.cdStart ~= cd.start or box.cdDur ~= cd.duration then
+			box.cdStart = cd.start
+			box.cdDur = cd.duration
+			box.cd:SetCooldown(cd.start, cd.duration)
+		end
+
+		box.time:SetText(format("%d", math.ceil(entry.remaining)))
+	else
+		if box.cdStart ~= nil then
+			box.cdStart = nil
+			box.cdDur = nil
+			box.cd:SetCooldown(0, 0)
+		end
+
+		box.time:SetText("")
+	end
+end
+
+function InterruptTrack:UpdatePlateKicks()
+	local list = PK.list
+	wipe(list)
+	if C_NamePlate ~= nil and InterruptTrack:GV(GetDB(), "NAMEPLATEKICKS", true) == true then
+		for guid, icon in pairs(PK.icons) do
+			icon.entry = nil
+			if icon.token then
+				for i, entry in ipairs(entries) do
+					if entry.key == icon.key then
+						icon.entry = entry
+						break
+					end
+				end
+			end
+
+			if icon.entry then
+				icon.guid = guid
+				icon.ready = icon.entry.remaining <= 0
+				tinsert(list, icon)
+			end
+		end
+	end
+
+	table.sort(list, SortKickIcons)
+	PK.slots = PK.slots or {}
+	wipe(PK.slots)
+	PK.stamp = (PK.stamp or 0) + 1
+	for i, icon in ipairs(list) do
+		local plate = C_NamePlate.GetNamePlateForUnit(icon.token)
+		if plate then
+			local box = GetKickBox(icon.guid)
+			local slot = (PK.slots[icon.token] or 0) + 1
+			PK.slots[icon.token] = slot
+			local anchor = GetPlateAnchor(plate)
+			if box:GetParent() ~= plate then
+				box:SetParent(plate)
+				local level = plate:GetFrameLevel() + 20
+				box:SetFrameLevel(level)
+				box.cd:SetFrameLevel(level + 1)
+				box.overlay:SetFrameLevel(level + 3)
+			end
+
+			if box.anchor ~= anchor or box.slot ~= slot then
+				box.anchor = anchor
+				box.slot = slot
+				box:ClearAllPoints()
+				box:SetPoint("RIGHT", anchor, "LEFT", -(PK.offset + (slot - 1) * (PK.size + PK.spacing)), 0)
+			end
+
+			PaintKickBox(box, icon)
+			box.stamp = PK.stamp
+			box:Show()
+		end
+	end
+
+	for guid, box in pairs(PK.boxes) do
+		if box.stamp ~= PK.stamp and box:IsShown() then box:Hide() end
+	end
+end
+
 local function Transmit(msg, channel)
 	local ok, ret = pcall(C_ChatInfo.SendAddonMessage, PREFIX, msg, channel)
 	if ok == false then return false end
@@ -1049,10 +1280,19 @@ function InterruptTrack:OnAddonMessage(msg, sender)
 		if guid == nil then return end
 		local key = GetKey(guid, spellID)
 		local isNew = casted[key] == nil
+		local now = GetTime()
 		casted[key] = {
-			["start"] = GetTime(),
+			["start"] = now,
 			["duration"] = duration
 		}
+
+		if pending.time ~= nil and now - pending.time <= GetWindow(spellID) then
+			casted[key].success = true
+			casted[key].kicked = pending.kicked
+			casted[key].hasKicked = pending.hasKicked
+			AddPlateKick(pending.plate, key)
+			pending.time = nil
+		end
 
 		SetLastKicker(guid)
 		InterruptTrack:DEBUG("KICK from", name, spellID, duration)
@@ -1250,6 +1490,7 @@ function InterruptTrack:CreateMainFrame()
 		if elapsed >= 0.05 then
 			elapsed = 0
 			InterruptTrack:UpdateBars()
+			InterruptTrack:UpdatePlateKicks()
 		end
 
 		markElapsed = markElapsed + ela
@@ -1305,6 +1546,7 @@ InterruptTrack:RegisterEvent(eventFrame, "UNIT_SPELLCAST_CHANNEL_STOP")
 InterruptTrack:RegisterEvent(eventFrame, "NAME_PLATE_UNIT_ADDED")
 InterruptTrack:RegisterEvent(eventFrame, "NAME_PLATE_UNIT_REMOVED")
 InterruptTrack:RegisterEvent(eventFrame, "CHAT_MSG_ADDON")
+InterruptTrack:RegisterEvent(eventFrame, "PLAYER_TARGET_CHANGED")
 eventFrame:SetScript("OnEvent", function(sel, event, ...)
 	if event == "UNIT_SPELLCAST_INTERRUPTED" then
 		local unit, castGUID, spellID = ...
@@ -1317,7 +1559,15 @@ eventFrame:SetScript("OnEvent", function(sel, event, ...)
 			InterruptTrack:OnInterrupted(unit, spellID)
 		end
 	elseif event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" then
+		if event == "NAME_PLATE_UNIT_ADDED" then
+			InterruptTrack:OnPlateAdded(...)
+		else
+			InterruptTrack:OnPlateRemoved(...)
+		end
+
 		InterruptTrack:UpdatePlates()
+	elseif event == "PLAYER_TARGET_CHANGED" then
+		InterruptTrack:OnTargetChanged()
 	elseif event == "CHAT_MSG_ADDON" then
 		local prefix, msg, _, sender = ...
 		if prefix == PREFIX then

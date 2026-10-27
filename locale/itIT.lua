@@ -10,6 +10,7 @@ InterruptTrack:AddTrans("itIT", "LID_SORTBYCOOLDOWNDESC", "Recupero decrescente"
 InterruptTrack:AddTrans("itIT", "LID_SORTBYCOOLDOWNASC", "Recupero crescente")
 InterruptTrack:AddTrans("itIT", "LID_KICKROTATION", "Rotazione delle interruzioni (prima il tank, poi i DPS)")
 InterruptTrack:AddTrans("itIT", "LID_ROTATIONSKIPHEALER", "Ignora i guaritori nella rotazione delle interruzioni")
+InterruptTrack:AddTrans("itIT", "LID_NAMEPLATEKICKS", "Tracker delle interruzioni sulle barre dei nomi")
 InterruptTrack:AddTrans("itIT", "LID_ANNOUNCEKICKCHAT", "Annuncia la prossima interruzione in chat (giocatori senza addon)")
 InterruptTrack:AddTrans("itIT", "LID_CHATNEXTKICK", "Prossima interruzione: %s (%s)")
 InterruptTrack:AddTrans("itIT", "LID_SHOWRAIDMARK", "Mostra simbolo incursione del bersaglio")
